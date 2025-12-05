@@ -7,6 +7,7 @@ using AutoCAD2024Final;
 // --- ПРОСТРАНСТВА ИМЕН AUTOCAD ---
 using Autodesk.AutoCAD.DatabaseServices; // Работа с базой чертежа (Transaction, ObjectId)
 using Autodesk.AutoCAD.EditorInput; // Ввод пользователя (выбор объектов, клики)
+using Autodesk.AutoCAD.ApplicationServices;
 using System;
 using System.Collections.Generic;
 using System.Windows; // Главное пространство имен WPF (Window, MessageBox, RoutedEventArgs)
