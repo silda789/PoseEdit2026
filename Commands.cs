@@ -1,168 +1,180 @@
-﻿using System;
-using System.IO; // Для работы с файлами (FileStream, Path)
-using System.Reflection; // Для работы с ресурсами внутри DLL (Assembly)
-using Autodesk.AutoCAD.Runtime; // Для регистрации команд [CommandMethod]
-using Autodesk.AutoCAD.ApplicationServices; // Для доступа к Документу и Приложению
-using Autodesk.AutoCAD.DatabaseServices; // Для работы с Базой Данных (BlockTable, LayerTable)
-using Autodesk.AutoCAD.EditorInput; // Для взаимодействия с пользователем (выбор, клики)
-using Autodesk.AutoCAD.Geometry; // Для точек (Point3d) и векторов
-using Autodesk.AutoCAD.Colors; // Для работы с цветами слоев
+﻿// #nullable disable — отключаем строгую проверку на null (пустые значения).
+// В .NET 8 это включено по умолчанию, и без этой строки будет много желтых предупреждений,
+// которые новичку только мешают.
+#nullable disable
+
+using System;
+using System.IO; // Работа с файловой системой (Path, File, FileStream)
+using System.Reflection; // "Рефлексия" - позволяет программе смотреть внутрь самой себя (нужно для ресурсов)
+
+// --- ПРОСТРАНСТВА ИМЕН AUTOCAD ---
+using Autodesk.AutoCAD.Runtime; // Атрибуты команд [CommandMethod]
+using Autodesk.AutoCAD.ApplicationServices; // Доступ к приложению (Application, Document)
+using Autodesk.AutoCAD.DatabaseServices; // Работа с базой DWG (Transaction, BlockTable, Entity)
+using Autodesk.AutoCAD.EditorInput; // Взаимодействие с пользователем (Selection, Point)
+using Autodesk.AutoCAD.Geometry; // Геометрия (Point3d, Scale3d)
+using Autodesk.AutoCAD.Colors; // Цвета (Color)
 
 namespace PoseEdit2026
 {
+    // Этот класс не обязательно должен быть static, но методы команд должны быть public.
     public class Commands
     {
         // ---------------------------------------------------------------------------------------
-        // НАСТРОЙКИ РЕСУРСОВ
+        // КОНСТАНТЫ И НАСТРОЙКИ
         // ---------------------------------------------------------------------------------------
-        // Имя ресурса теперь: PoseEdit2026.Resources.RL-POS.dwg
+
+        // Полные имена ресурсов (файлов DWG), зашитых внутри нашей DLL.
+        // Формат строго такой: "ИмяПроекта.Папка.ИмяФайла.расширение"
+        // Если проект "PoseEdit2026", папка "Resources", файл "RL-POS.dwg":
         private const string ResourceName1 = "PoseEdit2026.Resources.RL-POS.dwg";
         private const string ResourceName2 = "PoseEdit2026.Resources.RL-POS2.dwg";
 
-        // Имя слоя, на который мы будем закидывать наши блоки
+        // Имя слоя, на который мы будем автоматически помещать наши блоки.
         private const string TargetLayer = "ren.mtr.tb";
 
         // ---------------------------------------------------------------------------------------
-        // ОСНОВНАЯ КОМАНДА "EEN"
+        // ГЛАВНАЯ КОМАНДА "EEN"
         // ---------------------------------------------------------------------------------------
+        // [CommandMethod] регистрирует команду в AutoCAD. 
+        // Когда пользователь введет "EEN", вызовется этот метод.
         [CommandMethod("EEN")]
         public void EditPoseCommand()
         {
-            // Получаем доступ к текущему активному чертежу и его базе данных
+            // Получаем доступ к текущему открытому чертежу (Document)
             Document doc = Application.DocumentManager.MdiActiveDocument;
-            Editor ed = doc.Editor;     // "Редактор" - отвечает за ввод/вывод (сообщения, клики)
-            Database db = doc.Database; // "База данных" - хранит все линии, блоки и слои
+            if (doc == null) return; // Если нет открытых документов - выходим
 
-            // 1. СОХРАНЕНИЕ НАСТРОЕК
-            // Мы будем менять системные переменные, чтобы команда работала чисто.
-            // Но хороший тон программиста - вернуть всё как было после завершения.
+            Editor ed = doc.Editor;     // "Редактор" - отвечает за общение (ввод/вывод)
+            Database db = doc.Database; // "База данных" - здесь хранятся все линии и блоки
+
+            // 1. СОХРАНЕНИЕ ПОЛЬЗОВАТЕЛЬСКИХ НАСТРОЕК
+            // Мы будем менять системные переменные, чтобы команда работала корректно.
+            // Хороший тон программиста — запомнить, как было, и вернуть всё назад в конце.
             object oldClayer = Application.GetSystemVariable("CLAYER"); // Текущий слой
-            object oldDimzin = Application.GetSystemVariable("DIMZIN"); // Подавление нулей в размерах
+            object oldDimzin = Application.GetSystemVariable("DIMZIN"); // Подавление нулей
             object oldAttreq = Application.GetSystemVariable("ATTREQ"); // Запрос атрибутов при вставке
 
-            // Переменные для логики работы
-            bool isNewBlock = false;            // Флаг: мы редактируем старый или создаем новый?
+            // Логические флаги
+            bool isNewBlock = false;            // Мы создаем новый или редактируем старый?
             ObjectId blockId = ObjectId.Null;   // ID блока, с которым будем работать
-            Point3d insertPoint = Point3d.Origin; // Точка вставки (нужна для поворота в конце)
+            Point3d insertPoint = Point3d.Origin; // Точка вставки (нужна для поворота)
 
             try
             {
-                // 2. НАСТРОЙКА СРЕДЫ
-                // Отключаем эхо команд (чтобы в командной строке не спамило)
+                // 2. НАСТРОЙКА СРЕДЫ ПЕРЕД РАБОТОЙ
+                // CMDECHO = 0: Отключаем "спам" в командной строке от выполняемых скриптов
                 Application.SetSystemVariable("CMDECHO", 0);
-                // Настраиваем формат чисел (1 означает не подавлять нули, если нужно)
+                // DIMZIN = 1: Не подавлять нули (важно для корректного чтения чисел)
                 Application.SetSystemVariable("DIMZIN", 1);
-                // Отключаем запрос атрибутов. Мы заполним их программно. 
-                // Если оставить 1, AutoCAD спросит пользователя ввести значения в командной строке.
+                // ATTREQ = 0: Самое важное! Отключаем запрос атрибутов. 
+                // Иначе при вставке блока AutoCAD "зависнет", ожидая, что пользователь введет текст атрибутов.
                 Application.SetSystemVariable("ATTREQ", 0);
 
-                // Проверяем, есть ли нужный слой. Если нет - создаем.
+                // Проверяем, существует ли слой "ren.mtr.tb". Если нет — создаем его.
                 EnsureLayerExists(db, TargetLayer);
 
                 // 3. ВЫБОР ОБЪЕКТА
-                // Настраиваем фильтр. Разрешаем выбирать только Блоки (INSERT) с именами RL-POS или RL-POS2.
+                // Создаем фильтр выбора. Разрешаем выбирать только:
+                // 1. Объекты типа INSERT (Блоки)
+                // 2. С именами "RL-POS" или "RL-POS2"
                 TypedValue[] filterList = new TypedValue[] {
-                    new TypedValue((int)DxfCode.Start, "INSERT"), // Тип сущности
-                    new TypedValue((int)DxfCode.BlockName, "RL-POS,RL-POS2") // Имена (через запятую)
+                    new TypedValue((int)DxfCode.Start, "INSERT"),
+                    new TypedValue((int)DxfCode.BlockName, "RL-POS,RL-POS2")
                 };
                 SelectionFilter filter = new SelectionFilter(filterList);
 
-                // Настройки запроса выбора
+                // Настройки запроса
                 PromptSelectionOptions selOpts = new PromptSelectionOptions();
-                //selOpts.MessageForAdding = "\nВыберите позицию (RL-POS или RL-POS2) или нажмите Enter для новой: ";
                 selOpts.MessageForAdding = "\nSelect position (RL-POS or RL-POS2) or press Enter for new: ";
-                selOpts.SingleOnly = true; // Разрешаем выбрать только ОДИН объект
+                selOpts.SingleOnly = true; // Разрешаем выбрать только один объект за раз
 
-                // Запрашиваем выбор у пользователя
+                // Просим пользователя выбрать
                 PromptSelectionResult selRes = ed.GetSelection(selOpts, filter);
 
-                // 4. ЛОГИКА ВЕТВЛЕНИЯ
+                // 4. ЛОГИКА: РЕДАКТИРОВАНИЕ ИЛИ СОЗДАНИЕ?
                 if (selRes.Status == PromptStatus.OK)
                 {
-                    // === ВЕТКА А: Пользователь выбрал существующий блок ===
-                    blockId = selRes.Value[0].ObjectId; // Берем ID выбранного блока
+                    // === ВЕТКА А: Пользователь выбрал блок ===
+                    blockId = selRes.Value[0].ObjectId; // Запоминаем ID выбранного блока
                     isNewBlock = false;                 // Это не новый блок
                 }
                 else
                 {
-                    // === ВЕТКА Б: Пользователь нажал Enter (ничего не выбрал) -> Создаем НОВЫЙ ===
+                    // === ВЕТКА Б: Пользователь нажал Enter (ничего не выбрал) ===
                     isNewBlock = true;
 
-                    // Спрашиваем, куда поставить новый блок
-                    //PromptPointOptions ptOpts = new PromptPointOptions("\nТочка вставки новой позиции: ");
+                    // Спрашиваем точку вставки
                     PromptPointOptions ptOpts = new PromptPointOptions("\nInsertion point for new position: ");
                     PromptPointResult ptRes = ed.GetPoint(ptOpts);
 
-                    // Если пользователь нажал Esc на этапе точки - прерываем команду
+                    // Если пользователь нажал Esc — прерываем команду
                     if (ptRes.Status != PromptStatus.OK) return;
 
                     insertPoint = ptRes.Value;
 
-                    // Переключаем текущий слой на наш целевой, чтобы блок лег куда надо
+                    // Переключаем текущий слой на наш целевой
                     Application.SetSystemVariable("CLAYER", TargetLayer);
 
                     // --- ВСТАВКА ИЗ РЕСУРСОВ ---
-                    // По умолчанию вставляем RL-POS (как в оригинальном Лиспе).
-                    // Если захочешь сделать выбор, здесь можно добавить условие.
-                    string resourceToUse = ResourceName1;
+                    // Вызываем наш метод ImportBlockFromResource.
+                    // Он достанет файл из DLL и вставит его в чертеж.
+                    blockId = ImportBlockFromResource(db, ResourceName1, insertPoint, 1.0);
 
-                    // Вызываем наш мощный метод импорта (описан ниже)
-                    blockId = ImportBlockFromResource(db, resourceToUse, insertPoint, 1.0);
-
-                    // Если метод вернул Null, значит что-то пошло не так (например, имя ресурса кривое)
+                    // Если метод вернул Null, значит произошла ошибка (например, неправильное имя ресурса)
                     if (blockId == ObjectId.Null)
                     {
-                        //ed.WriteMessage("\nОшибка: Не удалось загрузить блок из ресурсов DLL. Проверьте имя ресурса!");
-                        ed.WriteMessage("\nError: Failed to load block from DLL resources. Check resource name!");
+                        ed.WriteMessage("\nError: Failed to load block from DLL resources.");
                         return;
                     }
                 }
 
-                // 5. ЗАПУСК ФОРМЫ
-                // Конструкция 'using' гарантирует, что форма правильно удалится из памяти после закрытия
-                using (PoseEditForm form = new PoseEditForm(blockId))
-                {
-                    // Показываем форму как "Модальное окно" (блокирует AutoCAD, пока не закроешь)
-                    System.Windows.Forms.DialogResult result = Application.ShowModalDialog(form);
+                // 5. ЗАПУСК ОКНА WPF
+                // Создаем экземпляр нашего окна PoseEditWindow
+                PoseEditWindow win = new PoseEditWindow(blockId);
 
-                    // Если пользователь нажал кнопку "Update Pose" (мы там прописали DialogResult.OK)
-                    if (result == System.Windows.Forms.DialogResult.OK)
+                // ShowModalWindow — это специальный метод AutoCAD для запуска WPF окон.
+                // Он блокирует AutoCAD, пока окно открыто.
+                // Возвращает bool? (true, false или null).
+                // true = мы закрыли окно через this.DialogResult = true (кнопка Update).
+                bool? result = Application.ShowModalWindow(win);
+
+                // Если пользователь нажал "Update Pose"
+                if (result == true)
+                {
+                    // Если блок был НОВЫМ, нужно дать пользователю повернуть его.
+                    // В .NET сложно сделать интерактивный поворот (Jig), поэтому мы просто
+                    // вызываем стандартную команду _.ROTATE.
+                    if (isNewBlock)
                     {
-                        // Если блок был НОВЫМ, нужно дать пользователю его повернуть.
-                        // В Лиспе это было: (command "rotate" ...)
-                        if (isNewBlock)
-                        {
-                            // Вызываем штатную команду AutoCAD, чтобы пользователь увидел "резинку" поворота
-                            ed.Command("_.ROTATE", blockId, "", insertPoint);
-                        }
+                        ed.Command("_.ROTATE", blockId, "", insertPoint);
                     }
-                    else if (isNewBlock) // Если нажали "Discard" (Отмена) или крестик
+                }
+                // Если пользователь нажал "Discard" (Отмена) или закрыл крестиком
+                else if (isNewBlock)
+                {
+                    // Если блок был новым, его надо удалить, чтобы не оставлять мусор на чертеже.
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
                     {
-                        // Если мы создали новый блок, но передумали его заполнять - его надо удалить.
-                        // Иначе на чертеже останется пустой блок.
-                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                        // Проверяем, жив ли еще объект (вдруг пользователь успел его удалить)
+                        if (!blockId.IsNull && !blockId.IsErased)
                         {
-                            // Проверяем, существует ли блок (вдруг его удалили руками)
-                            if (!blockId.IsNull && !blockId.IsErased)
-                            {
-                                Entity ent = tr.GetObject(blockId, OpenMode.ForWrite) as Entity;
-                                ent.Erase(); // Удаляем
-                            }
-                            tr.Commit();
+                            Entity ent = tr.GetObject(blockId, OpenMode.ForWrite) as Entity;
+                            ent.Erase(); // Удаляем
                         }
+                        tr.Commit();
                     }
                 }
             }
             catch (System.Exception ex)
             {
-                // Если случилась любая ошибка - пишем её в консоль
-                ed.WriteMessage("\nКритическая ошибка в команде EE: " + ex.Message);
+                // Ловим любые неожиданные ошибки и пишем их в командную строку
+                ed.WriteMessage("\nCritical error: " + ex.Message);
             }
             finally
             {
-                // 6. ВОССТАНОВЛЕНИЕ НАСТРОЕК
-                // Блок 'finally' выполняется ВСЕГДА, даже если была ошибка.
-                // Это гарантирует, что мы не сломаем настройки пользователя.
+                // 6. БЛОК FINALLY (ВЫПОЛНЯЕТСЯ ВСЕГДА)
+                // Восстанавливаем системные переменные, даже если программа упала с ошибкой.
                 try
                 {
                     if (oldClayer != null) Application.SetSystemVariable("CLAYER", oldClayer);
@@ -175,39 +187,31 @@ namespace PoseEdit2026
         }
 
         // ---------------------------------------------------------------------------------------
-        // МЕТОД ИМПОРТА: Достает DWG из DLL и вставляет в чертеж
+        // МЕТОД: ИМПОРТ БЛОКА ИЗ РЕСУРСОВ DLL
         // ---------------------------------------------------------------------------------------
         private ObjectId ImportBlockFromResource(Database db, string resourceId, Point3d position, double scale)
         {
-            // Получаем доступ к текущей запущенной DLL (нашей программе)
+            // Получаем ссылку на текущую сборку (наш файл .dll)
             Assembly assembly = Assembly.GetExecutingAssembly();
 
-            // Определяем "Чистое имя блока".
-            // Из строки "AutoCAD2024Final.Resources.RL-POS.dwg" делаем "RL-POS".
-            // Это нужно, чтобы в таблице блоков AutoCAD он назывался красиво.
-            string cleanBlockName = resourceId;
-            // Убираем начало (namespace + папка)
-            cleanBlockName = cleanBlockName.Replace("AutoCAD2024Final.Resources.", "");
-            // Убираем расширение
-            cleanBlockName = cleanBlockName.Replace(".dwg", "");
+            // Вычисляем чистое имя блока (для AutoCAD) из имени ресурса.
+            // Из "PoseEdit2026.Resources.RL-POS.dwg" делаем "RL-POS".
+            string cleanBlockName = resourceId.Replace("PoseEdit2026.Resources.", "").Replace(".dwg", "");
 
-            // Открываем поток чтения ресурса из DLL
+            // Открываем поток данных (Stream) из ресурса
             using (Stream stream = assembly.GetManifestResourceStream(resourceId))
             {
-                // Если поток пустой - значит имя ресурса написано с ошибкой
+                // Если stream == null, значит файл не найден (ошибка в имени ресурса)
                 if (stream == null)
                 {
                     string[] resources = assembly.GetManifestResourceNames();
-                    //Application.ShowAlertDialog("Не найден ресурс: " + resourceId + "\n\nДоступные ресурсы:\n" + string.Join("\n", resources));
-                    // Алерт при отсутствии ресурса (в методе ImportBlockFromResource)
-                    Application.ShowAlertDialog("Resource not found: " + resourceId + "\n\nAvailable resources:\n" + string.Join("\n", resources));
+                    Application.ShowAlertDialog("Resource not found: " + resourceId + "\n\nAvailable:\n" + string.Join("\n", resources));
                     return ObjectId.Null;
                 }
 
-                // AutoCAD не умеет вставлять блоки прямо из оперативной памяти. Ему нужен файл.
-                // Поэтому мы создаем временный файл на диске.
+                // AutoCAD не умеет вставлять блоки из потока памяти (Stream). Ему нужен файл на диске.
+                // Поэтому мы создаем временный файл.
                 string tempFile = Path.GetTempFileName();
-
                 try
                 {
                     // Копируем байты из DLL во временный файл
@@ -216,114 +220,101 @@ namespace PoseEdit2026
                         stream.CopyTo(fileStream);
                     }
 
-                    ObjectId btrId = ObjectId.Null; // ID определения блока (шаблона)
+                    ObjectId btrId = ObjectId.Null; // ID определения блока (Definition)
 
-                    // Начинаем транзакцию для работы с базой
+                    // Начинаем транзакцию
                     using (Transaction tr = db.TransactionManager.StartTransaction())
                     {
-                        // Открываем Таблицу Блоков (список всех блоков в чертеже)
+                        // Открываем таблицу блоков чертежа для записи
                         BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForWrite) as BlockTable;
 
-                        // Проверяем: А вдруг такой блок (RL-POS) уже есть в чертеже?
+                        // Проверяем: может, такой блок уже есть в чертеже?
                         if (bt.Has(cleanBlockName))
                         {
-                            // Если есть - используем его ID. Не надо импортировать заново.
-                            btrId = bt[cleanBlockName];
+                            btrId = bt[cleanBlockName]; // Если есть, берем его ID
                         }
                         else
                         {
-                            // Если нет - импортируем из нашего временного файла
+                            // Если нет, создаем "стороннюю базу данных" для временного файла
                             using (Database sourceDb = new Database(false, true))
                             {
-                                // Читаем DWG файл в память
+                                // Читаем временный файл как DWG
                                 sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, "");
-                                // Вставляем его в текущий чертеж под чистым именем
+                                // Вставляем (импортируем) блок в наш чертеж
                                 btrId = db.Insert(cleanBlockName, sourceDb, true);
                             }
                         }
 
-                        // Теперь создаем "Вхождение блока" (тот самый объект, который виден на экране)
-                        // BtrId - это ID "чертежа" блока (Definition).
-                        // BlkRef - это "ссылка" на него в конкретной точке (Reference).
+                        // Теперь создаем "Вхождение блока" (BlockReference) - то, что мы видим на экране
+                        // btrId - это чертеж блока в памяти.
+                        // blkRef - это ссылка на этот чертеж в конкретной точке.
+                        BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
 
                         using (BlockReference blkRef = new BlockReference(position, btrId))
                         {
-                            // Задаем масштаб
-                            blkRef.ScaleFactors = new Scale3d(scale, scale, scale);
+                            blkRef.ScaleFactors = new Scale3d(scale, scale, scale); // Масштаб
 
                             // Добавляем блок в текущее пространство (Модель или Лист)
                             BlockTableRecord curSpace = tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite) as BlockTableRecord;
                             curSpace.AppendEntity(blkRef);
-                            tr.AddNewlyCreatedDBObject(blkRef, true); // Сообщаем транзакции о новом объекте
+                            tr.AddNewlyCreatedDBObject(blkRef, true); // Регистрируем новый объект
 
-                            // --- САМАЯ ВАЖНАЯ ЧАСТЬ: АТРИБУТЫ ---
-                            // При программной вставке атрибуты НЕ создаются сами. Их нужно клонировать.
+                            // --- КОПИРОВАНИЕ АТРИБУТОВ ---
+                            // При программной вставке атрибуты НЕ создаются автоматически.
+                            // Мы должны вручную пробежаться по определению блока и создать AttributeReference для каждого AttributeDefinition.
 
-                            // Открываем определение блока (шаблон)
-                            BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
-
-                            // Проверяем, есть ли в шаблоне атрибуты
                             if (btr.HasAttributeDefinitions)
                             {
-                                // Перебираем все объекты внутри шаблона блока
                                 foreach (ObjectId id in btr)
                                 {
                                     DBObject obj = tr.GetObject(id, OpenMode.ForRead);
-
-                                    // Если объект - это Определение Атрибута (AttributeDefinition)
+                                    // Если объект - это определение атрибута
                                     if (obj is AttributeDefinition attDef)
                                     {
-                                        // Создаем Ссылку на Атрибут (AttributeReference) - это то, что хранит текст
                                         using (AttributeReference attRef = new AttributeReference())
                                         {
-                                            // Копируем свойства из шаблона (позицию, стиль, тэг)
+                                            // Копируем свойства (позиция, стиль, тэг)
                                             attRef.SetAttributeFromBlock(attDef, blkRef.BlockTransform);
-
-                                            // Добавляем атрибут к нашему блоку
+                                            // Добавляем к нашему блоку
                                             blkRef.AttributeCollection.AppendAttribute(attRef);
                                             tr.AddNewlyCreatedDBObject(attRef, true);
                                         }
                                     }
                                 }
                             }
-
-                            tr.Commit(); // Сохраняем изменения
+                            tr.Commit(); // Применяем изменения
                             return blkRef.ObjectId; // Возвращаем ID созданного блока
                         }
                     }
                 }
                 finally
                 {
-                    // Удаляем временный файл, чтобы не мусорить на диске пользователя
-                    if (File.Exists(tempFile))
-                    {
-                        try { File.Delete(tempFile); } catch { }
-                    }
+                    // Удаляем временный файл, чтобы не мусорить на диске
+                    if (File.Exists(tempFile)) try { File.Delete(tempFile); } catch { }
                 }
             }
         }
 
         // ---------------------------------------------------------------------------------------
-        // МЕТОД СОЗДАНИЯ СЛОЯ
+        // МЕТОД: СОЗДАНИЕ СЛОЯ
         // ---------------------------------------------------------------------------------------
         private void EnsureLayerExists(Database db, string layerName)
         {
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                // Открываем таблицу слоев
                 LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
 
-                // Если слоя с таким именем нет
+                // Если слоя нет - создаем
                 if (!lt.Has(layerName))
                 {
-                    lt.UpgradeOpen(); // Переходим в режим записи
+                    lt.UpgradeOpen(); // Разрешаем запись в таблицу слоев
 
                     LayerTableRecord newLayer = new LayerTableRecord();
                     newLayer.Name = layerName;
                     newLayer.Color = Color.FromColorIndex(ColorMethod.ByAci, 7); // Цвет 7 (Белый/Черный)
 
-                    lt.Add(newLayer); // Добавляем в таблицу
-                    tr.AddNewlyCreatedDBObject(newLayer, true); // Подтверждаем создание
+                    lt.Add(newLayer);
+                    tr.AddNewlyCreatedDBObject(newLayer, true);
                 }
                 tr.Commit();
             }
