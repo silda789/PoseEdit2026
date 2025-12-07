@@ -26,13 +26,16 @@ namespace PoseEdit2026
             // 1. Сначала заполняем списки
             InitLists();
 
-            // 2. Подписываемся на события для автоматического обновления полей
+            // 2. Инициализируем настройки
+            InitSettings();
+
+            // 3. Подписываемся на события для автоматического обновления полей
             SetupEventHandlers();
 
-            // 3. Только потом разрешаем событиям работать
+            // 4. Только потом разрешаем событиям работать
             _isLoading = false;
 
-            // 4. Загружаем данные из блока
+            // 5. Загружаем данные из блока
             LoadDataFromBlock();
         }
 
@@ -111,11 +114,94 @@ namespace PoseEdit2026
                 cmbNoteList.Items.Add("9 шт/м2");    // 9 стержней на квадратный метр
                 cmbNoteList.Items.Add("10 шт/м2");  // 10 стержней на квадратный метр
                 cmbNoteList.Items.Add("12 шт/м2");  // 12 стержней на квадратный метр
+
+                // ====================================================================================
+                // СПИСОК 4: cmbProjectName (Имя проекта)
+                // ====================================================================================
+                // Заполняем список проектов
+                if (cmbProjectName != null)
+                {
+                    cmbProjectName.Items.Clear();
+                    cmbProjectName.Items.Add("Default Project");
+                    cmbProjectName.IsEditable = true; // Разрешаем ввод текста
+                }
             }
             catch (Exception ex)
             {
                 // Если произошла ошибка при заполнении списков, показываем сообщение пользователю
                 MessageBox.Show("Ошибка при инициализации списков: " + ex.Message);
+            }
+        }
+
+        // ====================================================================================
+        // МЕТОД: InitSettings (Инициализация настроек)
+        // НАЗНАЧЕНИЕ: Загружает настройки из AppSettings и отображает их в интерфейсе
+        // ====================================================================================
+        private void InitSettings()
+        {
+            // Загружаем текущие настройки из AppSettings
+            if (txtSheetScale != null)
+            {
+                txtSheetScale.Text = AppSettings.SheetScale.ToString();
+            }
+
+            // Устанавливаем единицы измерения
+            if (rbMeter != null && rbCentimeter != null && rbMillimeter != null)
+            {
+                switch (AppSettings.DrawingUnit)
+                {
+                    case 1:
+                        rbMeter.IsChecked = true;
+                        break;
+                    case 100:
+                        rbCentimeter.IsChecked = true;
+                        break;
+                    case 1000:
+                    default:
+                        rbMillimeter.IsChecked = true;
+                        break;
+                }
+            }
+
+            // Устанавливаем язык таблиц
+            if (rbRus != null && rbEng != null && rbRusEng != null)
+            {
+                switch (AppSettings.TableLanguage)
+                {
+                    case "eng":
+                        rbEng.IsChecked = true;
+                        break;
+                    case "re":
+                        rbRusEng.IsChecked = true;
+                        break;
+                    case "rus":
+                    default:
+                        rbRus.IsChecked = true;
+                        break;
+                }
+            }
+
+            // Устанавливаем размещение таблиц
+            if (rbPlacement1 != null && rbPlacement2 != null && rbPlacement3 != null)
+            {
+                string[] placement = AppSettings.TablePlacement;
+                if (placement != null && placement.Length >= 3)
+                {
+                    if (placement[0] == "1") rbPlacement1.IsChecked = true;
+                    else if (placement[1] == "1") rbPlacement2.IsChecked = true;
+                    else if (placement[2] == "1") rbPlacement3.IsChecked = true;
+                    else rbPlacement3.IsChecked = true; // По умолчанию
+                }
+                else
+                {
+                    rbPlacement3.IsChecked = true;
+                }
+            }
+
+            // Устанавливаем имя проекта
+            if (cmbProjectName != null && !string.IsNullOrEmpty(AppSettings.ProjectName))
+            {
+                cmbProjectName.Text = AppSettings.ProjectName;
             }
         }
 
@@ -781,6 +867,114 @@ namespace PoseEdit2026
 
         private void btnUpdateAll_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
         private void btnRead_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
+
+        // ====================================================================================
+        // ОБРАБОТЧИКИ СОБЫТИЙ ДЛЯ НАСТРОЕК
+        // ====================================================================================
+
+        // Сохранение настроек
+        private void btnSaveSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Сохраняем масштаб
+                if (double.TryParse(txtSheetScale.Text, out double scale))
+                {
+                    AppSettings.SheetScale = scale;
+                }
+
+                // Сохраняем единицы измерения
+                if (rbMeter.IsChecked == true) AppSettings.DrawingUnit = 1;
+                else if (rbCentimeter.IsChecked == true) AppSettings.DrawingUnit = 100;
+                else if (rbMillimeter.IsChecked == true) AppSettings.DrawingUnit = 1000;
+
+                // Сохраняем язык таблиц
+                if (rbRus.IsChecked == true) AppSettings.TableLanguage = "rus";
+                else if (rbEng.IsChecked == true) AppSettings.TableLanguage = "eng";
+                else if (rbRusEng.IsChecked == true) AppSettings.TableLanguage = "re";
+
+                // Сохраняем размещение таблиц
+                string[] placement = { "0", "0", "0" };
+                if (rbPlacement1.IsChecked == true) placement[0] = "1";
+                else if (rbPlacement2.IsChecked == true) placement[1] = "1";
+                else if (rbPlacement3.IsChecked == true) placement[2] = "1";
+                AppSettings.TablePlacement = placement;
+
+                // Сохраняем имя проекта
+                if (cmbProjectName != null)
+                {
+                    AppSettings.ProjectName = cmbProjectName.Text ?? "";
+                }
+
+                MessageBox.Show("Settings saved successfully!", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox.Show($"Error saving settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Обработчики изменения единиц измерения
+        private void rbUnit_Checked(object sender, RoutedEventArgs e)
+        {
+            if (rbMeter.IsChecked == true) AppSettings.DrawingUnit = 1;
+            else if (rbCentimeter.IsChecked == true) AppSettings.DrawingUnit = 100;
+            else if (rbMillimeter.IsChecked == true) AppSettings.DrawingUnit = 1000;
+        }
+
+        // Обработчики изменения языка
+        private void rbLanguage_Checked(object sender, RoutedEventArgs e)
+        {
+            if (rbRus.IsChecked == true) AppSettings.TableLanguage = "rus";
+            else if (rbEng.IsChecked == true) AppSettings.TableLanguage = "eng";
+            else if (rbRusEng.IsChecked == true) AppSettings.TableLanguage = "re";
+        }
+
+        // Обработчики изменения размещения
+        private void rbPlacement_Checked(object sender, RoutedEventArgs e)
+        {
+            string[] placement = { "0", "0", "0" };
+            if (rbPlacement1.IsChecked == true) placement[0] = "1";
+            else if (rbPlacement2.IsChecked == true) placement[1] = "1";
+            else if (rbPlacement3.IsChecked == true) placement[2] = "1";
+            AppSettings.TablePlacement = placement;
+        }
+
+        // Обработчик добавления проекта в список
+        private void btnAddProject_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbProjectName == null) return;
+
+            string projectName = cmbProjectName.Text?.Trim();
+            if (string.IsNullOrEmpty(projectName))
+            {
+                MessageBox.Show("Please enter a project name.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Проверяем, нет ли уже такого проекта в списке
+            if (!cmbProjectName.Items.Contains(projectName))
+            {
+                cmbProjectName.Items.Add(projectName);
+                cmbProjectName.Text = projectName; // Устанавливаем выбранный проект
+                AppSettings.ProjectName = projectName;
+                MessageBox.Show($"Project '{projectName}' added to list.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                cmbProjectName.Text = projectName; // Просто выбираем существующий
+                AppSettings.ProjectName = projectName;
+            }
+        }
+
+        // Обработчик изменения выбора или текста в ComboBox проекта
+        private void cmbProjectName_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (cmbProjectName != null && !string.IsNullOrEmpty(cmbProjectName.Text))
+            {
+                AppSettings.ProjectName = cmbProjectName.Text;
+            }
+        }
 
         private string GetValueOrTag(TextBox box)
         {

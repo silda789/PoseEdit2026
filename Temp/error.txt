@@ -1,0 +1,16 @@
+
+ 0.NoPoz: Cap hatasi var. Duzeltip yeniden metraj yapin....! 
+
+ 0.NoPoz: Tip hatasi var. Duzeltip yeniden metraj yapin....! 
+
+ 0.NoPoz: Bukum boylarinda hata var. Duzeltip yeniden metraj yapin....! 
+
+ 0.NoPoz: Toplam boy hatasi var. Duzeltip yeniden metraj yapin....! 
+
+ 0.NoPoz: Tip hatasi var. Duzeltip yeniden metraj yapin....! 
+
+ 0.NoPoz: Bukum boylarinda hata var. Duzeltip yeniden metraj yapin....! 
+
+ 0.NoPoz: Toplam boy L=0 ! 
+
+ 0.NoPoz: Toplam boy L=0 ! 
