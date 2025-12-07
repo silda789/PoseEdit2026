@@ -267,15 +267,14 @@ namespace PoseEdit2026
                             {
                                 foreach (ObjectId id in btr)
                                 {
+                                    // ПРОБЛЕМА МОЖЕТ БЫТЬ ТУТ: Если объект удален или некорректен
                                     DBObject obj = tr.GetObject(id, OpenMode.ForRead);
-                                    // Если объект - это определение атрибута
-                                    if (obj is AttributeDefinition attDef)
+
+                                    if (obj is AttributeDefinition attDef) // Безопасная проверка типа
                                     {
                                         using (AttributeReference attRef = new AttributeReference())
                                         {
-                                            // Копируем свойства (позиция, стиль, тэг)
                                             attRef.SetAttributeFromBlock(attDef, blkRef.BlockTransform);
-                                            // Добавляем к нашему блоку
                                             blkRef.AttributeCollection.AppendAttribute(attRef);
                                             tr.AddNewlyCreatedDBObject(attRef, true);
                                         }

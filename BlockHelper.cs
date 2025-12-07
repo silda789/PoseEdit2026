@@ -1,17 +1,18 @@
-﻿using System.Collections.Generic;
+﻿#nullable disable
+using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.ApplicationServices;
 
-namespace AutoCAD2024Final
+// Имя должно быть PoseEdit2026, а не AutoCAD2024Final
+namespace PoseEdit2026
 {
-    // Класс-помощник для работы с атрибутами блока
     public static class BlockHelper
     {
-        // Метод для чтения всех атрибутов блока в словарь (Dictionary)
-        // Аналог функции (a_oku ...)
         public static Dictionary<string, string> GetAttributes(ObjectId blockId)
         {
             var attributes = new Dictionary<string, string>();
+            if (blockId.IsNull) return attributes;
 
             using (Transaction tr = blockId.Database.TransactionManager.StartTransaction())
             {
@@ -24,8 +25,6 @@ namespace AutoCAD2024Final
                         AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
                         if (attRef != null)
                         {
-                            // Сохраняем тег (имя) атрибута и его значение
-                            // Используем ToUpper(), чтобы не зависеть от регистра
                             attributes[attRef.Tag.ToUpper()] = attRef.TextString;
                         }
                     }
@@ -35,10 +34,10 @@ namespace AutoCAD2024Final
             return attributes;
         }
 
-        // Метод для записи значений атрибутов
-        // Аналог функции (att_yaz ...)
         public static void SetAttributes(ObjectId blockId, Dictionary<string, string> newValues)
         {
+            if (blockId.IsNull || newValues == null) return;
+
             using (Transaction tr = blockId.Database.TransactionManager.StartTransaction())
             {
                 BlockReference blkRef = tr.GetObject(blockId, OpenMode.ForWrite) as BlockReference;
@@ -49,7 +48,6 @@ namespace AutoCAD2024Final
                         AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
                         if (attRef != null && newValues.ContainsKey(attRef.Tag.ToUpper()))
                         {
-                            // Открываем атрибут для записи только если нужно менять
                             attRef.UpgradeOpen();
                             attRef.TextString = newValues[attRef.Tag.ToUpper()];
                         }
