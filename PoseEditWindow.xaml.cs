@@ -844,7 +844,7 @@ namespace PoseEdit2026
                 PromptEntityResult res = ed.GetEntity(opt);
                 if (res.Status == PromptStatus.OK)
                 {
-                    var result = RebarRecognizer.Recognize(res.ObjectId);
+                    var result = RebarRecognizer1.Recognize(res.ObjectId);
                     txtType.Text = result.Type;
                     txtLength.Text = result.Length;
                     txtA.Text = result.A;
