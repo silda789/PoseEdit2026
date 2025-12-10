@@ -4,6 +4,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.ApplicationServices;
 using System;
 using System.Collections.Generic;
+using System.Linq; // Для Enumerable.Range и других LINQ методов
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -26,8 +27,8 @@ namespace PoseEdit2026
             // 1. Сначала заполняем списки
             InitLists();
 
-            // 2. Инициализируем настройки
-            InitSettings();
+            // 2. Инициализируем настройки (убрано, так как настройки теперь в отдельном окне)
+            // InitSettings(); // УДАЛЕНО: настройки теперь открываются в отдельном окне SettingsWindow
 
             // 3. Подписываемся на события для автоматического обновления полей
             SetupEventHandlers();
@@ -55,10 +56,14 @@ namespace PoseEdit2026
                 // Заполняем список номерами форм от 00 до 93
                 // "D2" означает формат с двумя цифрами (00, 01, 02, ..., 93)
                 // ВНИМАНИЕ: В папке Resources есть только 94 картинки (от Shape_00.png до Shape_93.png)
+                // C# 12 / .NET 8: Используем Enumerable.Range для более читаемого кода
                 cmbShapeNumber.Items.Clear(); // Очищаем список перед заполнением
-                for (int i = 0; i <= 93; i++)
+                var shapeNumbers = Enumerable.Range(0, 94) // Генерируем числа от 0 до 93 (94 элемента)
+                    .Select(i => i.ToString("D2"))          // Преобразуем в строку с ведущим нулем (00, 01, ...)
+                    .ToArray();                             // Преобразуем в массив
+                foreach (var number in shapeNumbers)
                 {
-                    cmbShapeNumber.Items.Add(i.ToString("D2")); // Добавляем номер в список
+                    cmbShapeNumber.Items.Add(number); // Добавляем номер в список
                 }
 
                 // ====================================================================================
@@ -68,11 +73,13 @@ namespace PoseEdit2026
                 // A500C, A240, A-I, A-III - это марки стали для арматуры
                 cmbMaterial.Items.Clear(); // Очищаем список перед заполнением
                 
-                // Добавляем материалы в том порядке, в котором они должны отображаться
-                cmbMaterial.Items.Add("A500C");  // Высокопрочная арматура класса A500C
-                cmbMaterial.Items.Add("A240");   // Арматура класса A240
-                cmbMaterial.Items.Add("A-I");    // Арматура класса A-I (гладкая)
-                cmbMaterial.Items.Add("A-III");   // Арматура класса A-III (периодического профиля)
+                // C# 12: Используем collection expression для более компактного кода
+                // Вместо нескольких Add() можно использовать один массив и цикл
+                string[] materials = ["A500C", "A240", "A-I", "A-III"]; // Массив материалов
+                foreach (var material in materials)
+                {
+                    cmbMaterial.Items.Add(material);
+                }
 
                 // ====================================================================================
                 // СПИСОК 3: cmbNoteList (Список примечаний/позиций)
@@ -81,50 +88,55 @@ namespace PoseEdit2026
                 // Например: "внутр." = внутренняя, "внешн." = внешняя, "нижн." = нижняя и т.д.
                 cmbNoteList.Items.Clear(); // Очищаем список перед заполнением
                 
-                // Основные позиции (расположение арматуры)
-                cmbNoteList.Items.Add("внутр.");      // Внутренняя арматура
-                cmbNoteList.Items.Add("внешн.");       // Внешняя арматура
-                cmbNoteList.Items.Add("нижн.");       // Нижняя арматура
-                cmbNoteList.Items.Add("верхн.");      // Верхняя арматура
-                cmbNoteList.Items.Add("Центр");       // Центральная арматура
-                cmbNoteList.Items.Add("Хомут");        // Хомут (поперечная арматура)
-                cmbNoteList.Items.Add("Шпилька");      // Шпилька (вертикальная арматура)
+                // C# 12: Используем collection expression для более компактного кода
+                // Все примечания в одном массиве, затем добавляем через цикл
+                string[] noteList = [
+                    // Основные позиции (расположение арматуры)
+                    "внутр.",      // Внутренняя арматура
+                    "внешн.",      // Внешняя арматура
+                    "нижн.",       // Нижняя арматура
+                    "верхн.",      // Верхняя арматура
+                    "Центр",       // Центральная арматура
+                    "Хомут",       // Хомут (поперечная арматура)
+                    "Шпилька",     // Шпилька (вертикальная арматура)
+                    
+                    // Дополнительные позиции (первый ряд)
+                    "внутр. доп.",           // Внутренняя дополнительная
+                    "внешн. доп.",           // Внешняя дополнительная
+                    "внутр. доп. 2-й ряд",   // Внутренняя дополнительная, 2-й ряд
+                    "внешн. доп. 2-й ряд",   // Внешняя дополнительная, 2-й ряд
+                    
+                    // Дополнительные позиции (верх/низ)
+                    "нижн. доп.",           // Нижняя дополнительная
+                    "верхн. доп.",          // Верхняя дополнительная
+                    "нижн. доп. 2-й ряд",   // Нижняя дополнительная, 2-й ряд
+                    "верхн. доп. 2-й ряд",  // Верхняя дополнительная, 2-й ряд
+                    
+                    // Специальные позиции
+                    "боковая стержень",     // Боковая стержневая арматура
+                    "доп.",                 // Дополнительная (общее)
+                    
+                    // Плотность арматуры (количество стержней на квадратный метр)
+                    "1 шт/м2",   // 1 стержень на квадратный метр
+                    "2 шт/м2",   // 2 стержня на квадратный метр
+                    "4 шт/м2",   // 4 стержня на квадратный метр
+                    "6 шт/м2",   // 6 стержней на квадратный метр
+                    "9 шт/м2",   // 9 стержней на квадратный метр
+                    "10 шт/м2",  // 10 стержней на квадратный метр
+                    "12 шт/м2"   // 12 стержней на квадратный метр
+                ];
                 
-                // Дополнительные позиции (первый ряд)
-                cmbNoteList.Items.Add("внутр. доп.");           // Внутренняя дополнительная
-                cmbNoteList.Items.Add("внешн. доп.");           // Внешняя дополнительная
-                cmbNoteList.Items.Add("внутр. доп. 2-й ряд");   // Внутренняя дополнительная, 2-й ряд
-                cmbNoteList.Items.Add("внешн. доп. 2-й ряд");  // Внешняя дополнительная, 2-й ряд
-                
-                // Дополнительные позиции (верх/низ)
-                cmbNoteList.Items.Add("нижн. доп.");           // Нижняя дополнительная
-                cmbNoteList.Items.Add("верхн. доп.");           // Верхняя дополнительная
-                cmbNoteList.Items.Add("нижн. доп. 2-й ряд");    // Нижняя дополнительная, 2-й ряд
-                cmbNoteList.Items.Add("верхн. доп. 2-й ряд");  // Верхняя дополнительная, 2-й ряд
-                
-                // Специальные позиции
-                cmbNoteList.Items.Add("боковая стержень");      // Боковая стержневая арматура
-                cmbNoteList.Items.Add("доп.");                  // Дополнительная (общее)
-                
-                // Плотность арматуры (количество стержней на квадратный метр)
-                cmbNoteList.Items.Add("1 шт/м2");   // 1 стержень на квадратный метр
-                cmbNoteList.Items.Add("2 шт/м2");   // 2 стержня на квадратный метр
-                cmbNoteList.Items.Add("4 шт/м2");   // 4 стержня на квадратный метр
-                cmbNoteList.Items.Add("6 шт/м2");    // 6 стержней на квадратный метр
-                cmbNoteList.Items.Add("9 шт/м2");    // 9 стержней на квадратный метр
-                cmbNoteList.Items.Add("10 шт/м2");  // 10 стержней на квадратный метр
-                cmbNoteList.Items.Add("12 шт/м2");  // 12 стержней на квадратный метр
+                // Добавляем все элементы из массива в ComboBox
+                foreach (var note in noteList)
+                {
+                    cmbNoteList.Items.Add(note);
+                }
 
                 // ====================================================================================
                 // СПИСОК 4: cmbProjectName (Имя проекта)
                 // ====================================================================================
-                // Заполняем список проектов
-                if (cmbProjectName != null)
-                {
-                    cmbProjectName.Items.Clear();
-                    cmbProjectName.Items.Add("Default Project");
-                    cmbProjectName.IsEditable = true; // Разрешаем ввод текста
-                }
+                // УДАЛЕНО: cmbProjectName теперь находится в отдельном окне SettingsWindow
+                // Инициализация списка проектов происходит в SettingsWindow.xaml.cs
             }
             catch (Exception ex)
             {
@@ -135,75 +147,11 @@ namespace PoseEdit2026
 
         // ====================================================================================
         // МЕТОД: InitSettings (Инициализация настроек)
-        // НАЗНАЧЕНИЕ: Загружает настройки из AppSettings и отображает их в интерфейсе
+        // НАЗНАЧЕНИЕ: УДАЛЕН - настройки теперь инициализируются в отдельном окне SettingsWindow
         // ====================================================================================
-        private void InitSettings()
-        {
-            // Загружаем текущие настройки из AppSettings
-            if (txtSheetScale != null)
-            {
-                txtSheetScale.Text = AppSettings.SheetScale.ToString();
-            }
-
-            // Устанавливаем единицы измерения
-            if (rbMeter != null && rbCentimeter != null && rbMillimeter != null)
-            {
-                switch (AppSettings.DrawingUnit)
-                {
-                    case 1:
-                        rbMeter.IsChecked = true;
-                        break;
-                    case 100:
-                        rbCentimeter.IsChecked = true;
-                        break;
-                    case 1000:
-                    default:
-                        rbMillimeter.IsChecked = true;
-                        break;
-                }
-            }
-
-            // Устанавливаем язык таблиц
-            if (rbRus != null && rbEng != null && rbRusEng != null)
-            {
-                switch (AppSettings.TableLanguage)
-                {
-                    case "eng":
-                        rbEng.IsChecked = true;
-                        break;
-                    case "re":
-                        rbRusEng.IsChecked = true;
-                        break;
-                    case "rus":
-                    default:
-                        rbRus.IsChecked = true;
-                        break;
-                }
-            }
-
-            // Устанавливаем размещение таблиц
-            if (rbPlacement1 != null && rbPlacement2 != null && rbPlacement3 != null)
-            {
-                string[] placement = AppSettings.TablePlacement;
-                if (placement != null && placement.Length >= 3)
-                {
-                    if (placement[0] == "1") rbPlacement1.IsChecked = true;
-                    else if (placement[1] == "1") rbPlacement2.IsChecked = true;
-                    else if (placement[2] == "1") rbPlacement3.IsChecked = true;
-                    else rbPlacement3.IsChecked = true; // По умолчанию
-                }
-                else
-                {
-                    rbPlacement3.IsChecked = true;
-                }
-            }
-
-            // Устанавливаем имя проекта
-            if (cmbProjectName != null && !string.IsNullOrEmpty(AppSettings.ProjectName))
-            {
-                cmbProjectName.Text = AppSettings.ProjectName;
-            }
-        }
+        // Этот метод больше не нужен, так как настройки теперь открываются в отдельном окне.
+        // Инициализация настроек происходит в SettingsWindow.xaml.cs в методе LoadSettings().
+        // ====================================================================================
 
         // ====================================================================================
         // МЕТОД: SetupEventHandlers (Настройка обработчиков событий)
@@ -869,110 +817,41 @@ namespace PoseEdit2026
         private void btnRead_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
 
         // ====================================================================================
-        // ОБРАБОТЧИКИ СОБЫТИЙ ДЛЯ НАСТРОЕК
+        // ОБРАБОТЧИК: btnSettings_Click
         // ====================================================================================
-
-        // Сохранение настроек
-        private void btnSaveSettings_Click(object sender, RoutedEventArgs e)
+        // НАЗНАЧЕНИЕ: Открывает отдельное окно настроек
+        // ====================================================================================
+        // При нажатии кнопки "Settings" открывается отдельное окно SettingsWindow,
+        // где пользователь может изменить все настройки приложения.
+        // Настройки сохраняются в класс AppSettings, который доступен из любого места программы.
+        // ====================================================================================
+        private void btnSettings_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Сохраняем масштаб
-                if (double.TryParse(txtSheetScale.Text, out double scale))
+                // Создаем новое окно настроек
+                SettingsWindow settingsWindow = new SettingsWindow();
+                
+                // Показываем окно как модальное (блокирует главное окно, пока не закроется)
+                // ShowDialog() возвращает bool? (true/false/null):
+                //   - true = окно закрыто с сохранением (DialogResult = true)
+                //   - false = окно закрыто без сохранения (DialogResult = false)
+                //   - null = окно закрыто крестиком
+                bool? result = settingsWindow.ShowDialog();
+                
+                // Если настройки были сохранены (result == true), можно выполнить дополнительные действия
+                // Например, обновить какие-то элементы интерфейса, если они зависят от настроек
+                if (result == true)
                 {
-                    AppSettings.SheetScale = scale;
+                    // Настройки сохранены в AppSettings, можно их использовать
+                    // Здесь можно добавить логику обновления интерфейса, если нужно
+                    // Например, если настройки влияют на отображение данных в главном окне
                 }
-
-                // Сохраняем единицы измерения
-                if (rbMeter.IsChecked == true) AppSettings.DrawingUnit = 1;
-                else if (rbCentimeter.IsChecked == true) AppSettings.DrawingUnit = 100;
-                else if (rbMillimeter.IsChecked == true) AppSettings.DrawingUnit = 1000;
-
-                // Сохраняем язык таблиц
-                if (rbRus.IsChecked == true) AppSettings.TableLanguage = "rus";
-                else if (rbEng.IsChecked == true) AppSettings.TableLanguage = "eng";
-                else if (rbRusEng.IsChecked == true) AppSettings.TableLanguage = "re";
-
-                // Сохраняем размещение таблиц
-                string[] placement = { "0", "0", "0" };
-                if (rbPlacement1.IsChecked == true) placement[0] = "1";
-                else if (rbPlacement2.IsChecked == true) placement[1] = "1";
-                else if (rbPlacement3.IsChecked == true) placement[2] = "1";
-                AppSettings.TablePlacement = placement;
-
-                // Сохраняем имя проекта
-                if (cmbProjectName != null)
-                {
-                    AppSettings.ProjectName = cmbProjectName.Text ?? "";
-                }
-
-                MessageBox.Show("Settings saved successfully!", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                MessageBox.Show($"Error saving settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        // Обработчики изменения единиц измерения
-        private void rbUnit_Checked(object sender, RoutedEventArgs e)
-        {
-            if (rbMeter.IsChecked == true) AppSettings.DrawingUnit = 1;
-            else if (rbCentimeter.IsChecked == true) AppSettings.DrawingUnit = 100;
-            else if (rbMillimeter.IsChecked == true) AppSettings.DrawingUnit = 1000;
-        }
-
-        // Обработчики изменения языка
-        private void rbLanguage_Checked(object sender, RoutedEventArgs e)
-        {
-            if (rbRus.IsChecked == true) AppSettings.TableLanguage = "rus";
-            else if (rbEng.IsChecked == true) AppSettings.TableLanguage = "eng";
-            else if (rbRusEng.IsChecked == true) AppSettings.TableLanguage = "re";
-        }
-
-        // Обработчики изменения размещения
-        private void rbPlacement_Checked(object sender, RoutedEventArgs e)
-        {
-            string[] placement = { "0", "0", "0" };
-            if (rbPlacement1.IsChecked == true) placement[0] = "1";
-            else if (rbPlacement2.IsChecked == true) placement[1] = "1";
-            else if (rbPlacement3.IsChecked == true) placement[2] = "1";
-            AppSettings.TablePlacement = placement;
-        }
-
-        // Обработчик добавления проекта в список
-        private void btnAddProject_Click(object sender, RoutedEventArgs e)
-        {
-            if (cmbProjectName == null) return;
-
-            string projectName = cmbProjectName.Text?.Trim();
-            if (string.IsNullOrEmpty(projectName))
-            {
-                MessageBox.Show("Please enter a project name.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // Проверяем, нет ли уже такого проекта в списке
-            if (!cmbProjectName.Items.Contains(projectName))
-            {
-                cmbProjectName.Items.Add(projectName);
-                cmbProjectName.Text = projectName; // Устанавливаем выбранный проект
-                AppSettings.ProjectName = projectName;
-                MessageBox.Show($"Project '{projectName}' added to list.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
-            {
-                cmbProjectName.Text = projectName; // Просто выбираем существующий
-                AppSettings.ProjectName = projectName;
-            }
-        }
-
-        // Обработчик изменения выбора или текста в ComboBox проекта
-        private void cmbProjectName_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (cmbProjectName != null && !string.IsNullOrEmpty(cmbProjectName.Text))
-            {
-                AppSettings.ProjectName = cmbProjectName.Text;
+                // Если произошла ошибка при открытии окна настроек, показываем сообщение
+                MessageBox.Show($"Error opening settings window: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

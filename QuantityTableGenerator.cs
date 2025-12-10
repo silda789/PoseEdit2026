@@ -102,10 +102,11 @@ namespace PoseEdit2026
                 double olcuCarp = 1.0 / birim;
 
                 // Выбор блоков RL-POS
-                TypedValue[] filterList = new TypedValue[] {
+                // C# 12: Используем новый синтаксис коллекций (collection expressions)
+                TypedValue[] filterList = [
                     new TypedValue((int)DxfCode.Start, "INSERT"),
                     new TypedValue((int)DxfCode.BlockName, "RL-POS")
-                };
+                ];
                 SelectionFilter filter = new SelectionFilter(filterList);
 
                 PromptSelectionOptions selOpts = new PromptSelectionOptions();
@@ -626,7 +627,8 @@ namespace PoseEdit2026
                 if (File.Exists(placementFile))
                 {
                     string[] lines = File.ReadAllLines(placementFile);
-                    List<string> settings = new List<string>();
+                    // C# 12: Используем collection expression для инициализации списка
+                    List<string> settings = [];
                     
                     foreach (string line in lines)
                     {
@@ -646,7 +648,8 @@ namespace PoseEdit2026
             catch { }
 
             // Настройки по умолчанию: третья схема размещения активна
-            return new string[] { "0", "0", "1" };
+            // C# 12: Используем collection expression для инициализации массива
+            return ["0", "0", "1"];
         }
 
         /// <summary>
@@ -659,11 +662,12 @@ namespace PoseEdit2026
             {
                 LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
 
-                string[] layers = {
+                // C# 12: Используем collection expression для инициализации массива
+                string[] layers = [
                     "ren.mtr.layer_l1",    // Основные линии таблиц
                     "ren.mtr.layer_t1",    // Текст таблиц
                     "ren.mtr.bar"          // Слой для таблиц
-                };
+                ];
 
                 foreach (string layerName in layers)
                 {

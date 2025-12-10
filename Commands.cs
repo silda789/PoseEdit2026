@@ -78,10 +78,12 @@ namespace PoseEdit2026
                 // Создаем фильтр выбора. Разрешаем выбирать только:
                 // 1. Объекты типа INSERT (Блоки)
                 // 2. С именами "RL-POS" или "RL-POS2"
-                TypedValue[] filterList = new TypedValue[] {
+                // C# 12: Используем новый синтаксис коллекций (collection expressions)
+                // Вместо new TypedValue[] { ... } теперь можно писать просто [ ... ]
+                TypedValue[] filterList = [
                     new TypedValue((int)DxfCode.Start, "INSERT"),
                     new TypedValue((int)DxfCode.BlockName, "RL-POS,RL-POS2")
-                };
+                ];
                 SelectionFilter filter = new SelectionFilter(filterList);
 
                 // Настройки запроса

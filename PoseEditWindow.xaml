@@ -70,95 +70,12 @@
          Grid - это самый мощный инструмент разметки. Это невидимая таблица.
          Мы делим окно на Строки (Row) и Столбцы (Column).
     -->
-    <TabControl Margin="5" x:Name="mainTabControl">
-        
-        <!-- ВКЛАДКА 1: НАСТРОЙКИ -->
-        <TabItem Header="Settings">
-            <Grid Margin="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1*"/>
-                    <ColumnDefinition Width="2*"/>
-                </Grid.ColumnDefinitions>
-                <Grid Grid.Column="0" Margin="0,0,10,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                <!-- ГРУППА: Масштаб чертежа -->
-                <GroupBox Header="Sheet Scale" Grid.Row="0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Label Content="Scale 1 /" Grid.Column="0"/>
-                        <TextBox x:Name="txtSheetScale" Grid.Column="1" Text="50"/>
-                    </Grid>
-                </GroupBox>
-
-                <!-- ГРУППА: Единицы измерения -->
-                <GroupBox Header="Drawing Unit" Grid.Row="1">
-                    <StackPanel>
-                        <RadioButton x:Name="rbMeter" Content="Meter" GroupName="Units" IsChecked="False" Checked="rbUnit_Checked"/>
-                        <RadioButton x:Name="rbCentimeter" Content="Centimeter" GroupName="Units" IsChecked="False" Checked="rbUnit_Checked"/>
-                        <RadioButton x:Name="rbMillimeter" Content="Millimeter" GroupName="Units" IsChecked="True" Checked="rbUnit_Checked"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- ГРУППА: Язык таблиц -->
-                <GroupBox Header="Quantity Table Language" Grid.Row="2">
-                    <StackPanel>
-                        <RadioButton x:Name="rbRus" Content="Russian" GroupName="Language" IsChecked="True" Checked="rbLanguage_Checked"/>
-                        <RadioButton x:Name="rbEng" Content="English" GroupName="Language" IsChecked="False" Checked="rbLanguage_Checked"/>
-                        <RadioButton x:Name="rbRusEng" Content="Russian/English" GroupName="Language" IsChecked="False" Checked="rbLanguage_Checked"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- ГРУППА: Имя проекта -->
-                <GroupBox Header="Project Name" Grid.Row="3">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <ComboBox x:Name="cmbProjectName" Grid.Row="0" Height="30" IsEditable="True" SelectionChanged="cmbProjectName_SelectionChanged"/>
-                        <Button Content="Add to List" Grid.Row="1" Height="25" Margin="0,5,0,0" Click="btnAddProject_Click" FontSize="10"/>
-                    </Grid>
-                </GroupBox>
-
-                <!-- ГРУППА: Размещение таблиц -->
-                <GroupBox Header="Table Placement" Grid.Row="4">
-                    <StackPanel>
-                        <RadioButton x:Name="rbPlacement1" Content="Placement-1" GroupName="Placement" IsChecked="False" Checked="rbPlacement_Checked" Margin="0,2"/>
-                        <RadioButton x:Name="rbPlacement2" Content="Placement-2" GroupName="Placement" IsChecked="False" Checked="rbPlacement_Checked" Margin="0,2"/>
-                        <RadioButton x:Name="rbPlacement3" Content="Placement-3" GroupName="Placement" IsChecked="True" Checked="rbPlacement_Checked" Margin="0,2"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- КНОПКИ -->
-                <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-                    <Button Content="Save Settings" Width="120" Height="35" FontWeight="Bold" Click="btnSaveSettings_Click"/>
-                </StackPanel>
-                </Grid>
-                <!-- ПРАВАЯ ЧАСТЬ (2/3) - ПУСТАЯ, ДЛЯ БУДУЩЕГО -->
-                <Grid Grid.Column="1" Background="#F5F5F5">
-                    <TextBlock Text="Reserved for future features" 
-                               HorizontalAlignment="Center" 
-                               VerticalAlignment="Center" 
-                               Foreground="Gray" 
-                               FontStyle="Italic"/>
-                </Grid>
-            </Grid>
-        </TabItem>
-
-        <!-- ВКЛАДКА 2: ОСНОВНАЯ РАБОТА -->
-        <TabItem Header="Main">
+    <!-- 
+        УДАЛЕНА ВКЛАДКА SETTINGS - теперь настройки открываются в отдельном окне
+        при нажатии кнопки "Settings" в нижнем ряду кнопок
+    -->
+    <Grid>
+        <!-- ВКЛАДКА: ОСНОВНАЯ РАБОТА (теперь единственная) -->
             <Grid Margin="0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
@@ -452,17 +369,20 @@
                     <ColumnDefinition Width="*"/>
                     <!-- Колонка 3: Update All -->
                     <ColumnDefinition Width="*"/>
-                        <!-- Колонка 4: Правая колонка (Preview) - здесь будет Tik -->
+                    <!-- Колонка 4: Settings -->
+                    <ColumnDefinition Width="*"/>
+                        <!-- Колонка 5: Правая колонка (Preview) - здесь будет Tik -->
                     </Grid.ColumnDefinitions>
 
-                        <!-- Все 4 кнопки равномерно распределены по колонкам с одинаковыми расстояниями -->
+                        <!-- Все 5 кнопок равномерно распределены по колонкам с одинаковыми расстояниями -->
                     <Button x:Name="btnUpdatePose" Grid.Column="0" Content="Update Pose" Height="35" FontWeight="Bold" Click="btnUpdate_Click" Width="100" HorizontalAlignment="Center" Margin="0,0,5,0"/>
                     <Button x:Name="btnDiscard" Grid.Column="1" Content="Discard" Height="35" Click="btnDiscard_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
                     <Button x:Name="btnRead" Grid.Column="2" Content="Read" Height="35" Click="btnRead_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
-                    <Button x:Name="btnUpdateAll" Grid.Column="3" Content="Update All" Height="35" Click="btnUpdateAll_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,0,0"/>
+                    <Button x:Name="btnUpdateAll" Grid.Column="3" Content="Update All" Height="35" Click="btnUpdateAll_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
+                    <Button x:Name="btnSettings" Grid.Column="4" Content="Settings" Height="35" Click="btnSettings_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,0,0"/>
 
-                    <!-- Tik (группа 1) - опущен вниз строго по вертикали, остался в правой колонке (Grid.Column="4") -->
-                    <Grid Grid.Column="4" Margin="5,0,0,0" HorizontalAlignment="Left">
+                    <!-- Tik (группа 1) - опущен вниз строго по вертикали, остался в правой колонке (Grid.Column="5") -->
+                    <Grid Grid.Column="5" Margin="5,0,0,0" HorizontalAlignment="Left">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="90"/>
                             <ColumnDefinition Width="60"/>
@@ -478,6 +398,5 @@
                 </Grid>
                 </Grid>
             </Grid>
-        </TabItem>
-    </TabControl>
+    </Grid>
 </Window>
