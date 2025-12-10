@@ -68,3 +68,4 @@ Write-Host "💡 Откройте папку $outputPath и проверьте �
 Write-Host "   Особенно обратите внимание на .md и .txt файлы - они могут содержать чаты!" -ForegroundColor Yellow
 
 
+

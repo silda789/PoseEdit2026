@@ -11,7 +11,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="POSE EDIT 2026 ARS Co." 
-        Height="600" Width="1200"
+        Height="430" Width="960"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#F0F0F0">
@@ -301,10 +301,11 @@
                            Stretch="Uniform"
                            HorizontalAlignment="Center" 
                            VerticalAlignment="Center"
-                           MinWidth="350"
-                           MinHeight="350"
+                           MinHeight="245"
+                           MinWidth="245"
                            RenderOptions.BitmapScalingMode="HighQuality"
-                           RenderOptions.CachingHint="Cache"/>
+                           RenderOptions.CachingHint="Cache"
+                           SnapsToDevicePixels="True" Margin="0,0,0,-15"/>
                             </GroupBox>
 
                             <!-- Нижняя часть правой колонки (StackPanel просто складывает элементы друг под другом) -->
@@ -359,41 +360,48 @@
                 <!-- Кнопки и Tik расположены в Grid.Row="1" верхней сетки, на уровне блоков Main Data и Rebar Shape Data -->
                 <Grid Grid.Row="1" Margin="5,10,5,5">
                     <Grid.ColumnDefinitions>
-                    <!-- Равномерные колонки для 4 кнопок - обеспечивают одинаковые расстояния между кнопками -->
-                    <ColumnDefinition Width="*"/>
-                    <!-- Колонка 0: Update Pose -->
-                    <ColumnDefinition Width="*"/>
-                    <!-- Колонка 1: Discard -->
-                    <ColumnDefinition Width="*"/>
-                    <!-- Колонка 2: Read -->
-                    <ColumnDefinition Width="*"/>
-                    <!-- Колонка 3: Update All -->
-                    <ColumnDefinition Width="*"/>
-                    <!-- Колонка 4: Settings -->
-                    <ColumnDefinition Width="*"/>
-                        <!-- Колонка 5: Правая колонка (Preview) - здесь будет Tik -->
+                        <!-- Зона основных кнопок -->
+                        <ColumnDefinition Width="540"/>
+                        <!-- Свободное пространство между основными кнопками и правым блоком -->
+                        <ColumnDefinition Width="*"/>
+                        <!-- Кнопка Settings -->
+                        <ColumnDefinition Width="Auto"/>
+                        <!-- Tik -->
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                        <!-- Все 5 кнопок равномерно распределены по колонкам с одинаковыми расстояниями -->
-                    <Button x:Name="btnUpdatePose" Grid.Column="0" Content="Update Pose" Height="35" FontWeight="Bold" Click="btnUpdate_Click" Width="100" HorizontalAlignment="Center" Margin="0,0,5,0"/>
-                    <Button x:Name="btnDiscard" Grid.Column="1" Content="Discard" Height="35" Click="btnDiscard_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
-                    <Button x:Name="btnRead" Grid.Column="2" Content="Read" Height="35" Click="btnRead_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
-                    <Button x:Name="btnUpdateAll" Grid.Column="3" Content="Update All" Height="35" Click="btnUpdateAll_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
-                    <Button x:Name="btnSettings" Grid.Column="4" Content="Settings" Height="35" Click="btnSettings_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,0,0"/>
-
-                    <!-- Tik (группа 1) - опущен вниз строго по вертикали, остался в правой колонке (Grid.Column="5") -->
-                    <Grid Grid.Column="5" Margin="5,0,0,0" HorizontalAlignment="Left">
+                    <!-- Внутренняя сетка на 540px: Update Pose слева, Update All прижат вправо, Discard/Read равномерно между -->
+                    <Grid Grid.Column="0" HorizontalAlignment="Left" Width="540">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="53"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="53"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="53"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="btnUpdatePose" Grid.Column="0" Content="Update Pose" Height="35" FontWeight="Bold" Click="btnUpdate_Click" Width="90" HorizontalAlignment="Left" Margin="8,0,0,0"/>
+                        <Button x:Name="btnDiscard" Grid.Column="2" Content="Discard" Height="35" Click="btnDiscard_Click" Width="90" HorizontalAlignment="Center" Margin="0"/>
+                        <Button x:Name="btnRead" Grid.Column="4" Content="Read" Height="35" Click="btnRead_Click" Width="90" HorizontalAlignment="Center" Margin="0"/>
+                        <Button x:Name="btnUpdateAll" Grid.Column="6" Content="Update All" Height="35" Click="btnUpdateAll_Click" Width="90" HorizontalAlignment="Right" Margin="0"/>
+                    </Grid>
+
+                    <Button x:Name="btnSettings" Grid.Column="2" Content="Settings" Height="35" Click="btnSettings_Click" Width="90" HorizontalAlignment="Center" Margin="4,0,4,0"/>
+
+                    <!-- Tik (группа 1) справа от Settings -->
+                    <Grid Grid.Column="3" Margin="0,0,0,0" HorizontalAlignment="Left">
+                        <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="45"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Label Content="Tik:" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="txtTik" Grid.Column="1" VerticalAlignment="Center"/>
-                        <!-- GroupName объединяет радиокнопки, чтобы можно было выбрать только одну -->
-                        <RadioButton Content="0:" GroupName="TikGroup" Margin="10,0" VerticalAlignment="Center" Grid.Column="2"/>
-                        <RadioButton Content="1:" GroupName="TikGroup" IsChecked="True" VerticalAlignment="Center" Grid.Column="3"/>
+                        <TextBox x:Name="txtTik" Grid.Column="1" VerticalAlignment="Center" Width="45"/>
+                        <RadioButton Content="0:" GroupName="TikGroup" Margin="4,0" VerticalAlignment="Center" Grid.Column="2"/>
+                        <RadioButton Content="1:" GroupName="TikGroup" IsChecked="True" Margin="4,0" VerticalAlignment="Center" Grid.Column="3"/>
                     </Grid>
                 </Grid>
                 </Grid>

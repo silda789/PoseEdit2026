@@ -760,6 +760,112 @@ namespace PoseEdit2026
             }
         }
 
+        /// <summary>
+        /// Специальная привязка для Item: выбираем направление (линия/поли-линия/размер/дуга),
+        /// считаем длину и делим на шаг из txtSpace, результат (кол-во стержней) пишем в txtItem.
+        /// </summary>
+        private void LinkItemWithSpacingToCount()
+        {
+            // Парсим шаг арматуры
+            double space = ParseDouble(txtSpace.Text);
+            if (space <= 0)
+            {
+                MessageBox.Show("Укажите корректный шаг арматуры (txtSpace).");
+                return;
+            }
+
+            this.Hide();
+            try
+            {
+                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
+                PromptEntityOptions opt = new PromptEntityOptions("\nSelect Line / Polyline / Arc / Dimension:");
+                opt.SetRejectMessage("\nInvalid object. Select Line / Polyline / Arc / Dimension.");
+                opt.AddAllowedClass(typeof(Line), true);
+                opt.AddAllowedClass(typeof(Polyline), true);
+                opt.AddAllowedClass(typeof(Polyline2d), true);
+                opt.AddAllowedClass(typeof(Polyline3d), true);
+                opt.AddAllowedClass(typeof(Arc), true);
+                opt.AddAllowedClass(typeof(Circle), true);
+                // Все виды размеров (Linear, Aligned, Rotated, ArcLength и т.п.)
+                opt.AddAllowedClass(typeof(Dimension), true);
+                opt.AddAllowedClass(typeof(RotatedDimension), true);
+                opt.AddAllowedClass(typeof(AlignedDimension), true);
+                opt.AddAllowedClass(typeof(ArcDimension), true);
+                opt.AddAllowedClass(typeof(OrdinateDimension), true);
+                opt.AddAllowedClass(typeof(RadialDimension), true);
+                opt.AddAllowedClass(typeof(RadialDimensionLarge), true);
+                opt.AddAllowedClass(typeof(DiametricDimension), true);
+
+                PromptEntityResult res = ed.GetEntity(opt);
+                if (res.Status != PromptStatus.OK) return;
+
+                double len = 0;
+                using (Transaction tr = res.ObjectId.Database.TransactionManager.StartTransaction())
+                {
+                    Entity ent = tr.GetObject(res.ObjectId, OpenMode.ForRead) as Entity;
+                    switch (ent)
+                    {
+                        case Line l:
+                            len = l.Length;
+                            break;
+                        case Polyline p:
+                            len = p.Length;
+                            break;
+                        case Arc a:
+                            len = a.Length;
+                            break;
+                        case Dimension d:
+                            try
+                            {
+                                // Для Linear/Aligned/ArcLength/Rotated/Ordinate и др.
+                                len = d.Measurement;
+                            }
+                            catch
+                            {
+                                // Резервный вариант через рефлексию, если Measurement недоступен
+                                try
+                                {
+                                    var prop = ent.GetType().GetProperty("Measurement");
+                                    if (prop != null)
+                                    {
+                                        len = Convert.ToDouble(prop.GetValue(ent));
+                                    }
+                                }
+                                catch
+                                {
+                                    // Финальный резерв: попробовать Length если это Curve-подобное
+                                    if (ent is Curve cv)
+                                        len = cv.GetDistanceAtParameter(cv.EndParam);
+                                }
+                            }
+                            break;
+                    }
+                    tr.Commit();
+                }
+
+                if (len <= 0)
+                {
+                    MessageBox.Show("Длина выбранного объекта не определена или равна нулю.");
+                    return;
+                }
+
+                // Количество стержней: округление к ближайшему (0.5 вверх), минимум 1
+                double raw = len / space;
+                int count = Math.Max(1, (int)Math.Round(raw, MidpointRounding.AwayFromZero));
+                txtItem.Tag = null;
+                txtItem.Background = Brushes.White;
+                txtItem.Text = count.ToString();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ошибка при расчёте количества: " + ex.Message);
+            }
+            finally
+            {
+                this.ShowDialog();
+            }
+        }
+
         private void btnLinkA_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtA);
         private void btnLinkB_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtB);
         private void btnLinkC_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtC);
@@ -767,7 +873,7 @@ namespace PoseEdit2026
         private void btnLinkE_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtE);
         private void btnLinkF_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtF);
         private void btnLinkR_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtR);
-        private void btnLinkItem_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtItem);
+        private void btnLinkItem_Click(object sender, RoutedEventArgs e) => LinkItemWithSpacingToCount();
 
         private void txtDimension_GotFocus(object sender, RoutedEventArgs e)
         {
