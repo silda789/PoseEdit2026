@@ -73,6 +73,12 @@ namespace PoseEdit2026
         // По умолчанию: пустая строка (проект не задан)
         private static string _projectName = "";
 
+        // Группа Tik: стартовый номер, режим продолжения и последний присвоенный номер
+        // TikMode: 0 - сбрасывать, 1 - продолжать
+        private static int _tikValue = 1;
+        private static int _tikMode = 0;
+        private static int _lastPozNumber = 0;
+
         // ====================================================================================
         // ПУБЛИЧНЫЕ СВОЙСТВА (Интерфейс доступа к данным)
         // ====================================================================================
@@ -156,6 +162,33 @@ namespace PoseEdit2026
             get => _projectName;
             // Если передан null, используем пустую строку (чтобы избежать ошибок)
             set => _projectName = value ?? "";
+        }
+
+        /// <summary>
+        /// Стартовое значение позиции (из txtTik)
+        /// </summary>
+        public static int TikValue
+        {
+            get => _tikValue;
+            set => _tikValue = value;
+        }
+
+        /// <summary>
+        /// 0 - сбрасывать нумерацию, 1 - продолжать
+        /// </summary>
+        public static int TikMode
+        {
+            get => _tikMode;
+            set => _tikMode = value;
+        }
+
+        /// <summary>
+        /// Последний присвоенный номер для продолжения нумерации
+        /// </summary>
+        public static int LastPozNumber
+        {
+            get => _lastPozNumber;
+            set => _lastPozNumber = value;
         }
 
         // ====================================================================================

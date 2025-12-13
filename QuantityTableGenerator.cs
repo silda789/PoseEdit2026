@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using System.Globalization;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -778,20 +779,152 @@ namespace PoseEdit2026
 
         private static void DrawTablesRussian(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
         {
-            // TODO: Реализовать рисование таблиц на русском языке
-            // Аналог функции RENAISSANCE_metraj_tablo_ciz_rus
+            DrawTablesGeneric(yerlesim, capListe, toplamBilgi, olcek, "rus");
         }
 
         private static void DrawTablesEnglish(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
         {
-            // TODO: Реализовать рисование таблиц на английском языке
-            // Аналог функции RENAISSANCE_metraj_tablo_ciz_eng
+            DrawTablesGeneric(yerlesim, capListe, toplamBilgi, olcek, "eng");
         }
 
         private static void DrawTablesRussianEnglish(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
         {
-            // TODO: Реализовать рисование таблиц на русском и английском языках
-            // Аналог функции RENAISSANCE_metraj_tablo_ciz_re
+            DrawTablesGeneric(yerlesim, capListe, toplamBilgi, olcek, "re");
+        }
+
+        /// <summary>
+        /// Минимальная рабочая версия построения таблиц, пока полная геометрия из LISP не перенесена.
+        /// Строит две таблицы AutoCAD: сводка по диаметрам и детализация по позициям.
+        /// </summary>
+        private static void DrawTablesGeneric(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek, string lang)
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Database db = doc.Database;
+
+            // Безопасные значения размеров таблицы
+            double rowH = Math.Max(olcek * 0.8, 2.5);      // высота строки
+            double colSmall = Math.Max(olcek * 1.5, 8.0);  // ширина для небольших столбцов
+            double colWide = Math.Max(olcek * 2.5, 12.0);  // ширина для длины/примечаний
+            double gap = Math.Max(olcek * 1.0, 8.0);       // зазор между таблицами
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+
+                // ------------------------------
+                // 1. Таблица сводки по диаметрам
+                // ------------------------------
+                Table diaTable = new Table
+                {
+                    TableStyle = db.Tablestyle,
+                    Layer = "ren.mtr.bar"
+                };
+
+                int diaRows = Math.Max(capListe.Count + 1, 2);
+                diaTable.SetSize(diaRows, 2);
+                diaTable.Columns[0].Width = colSmall;
+                diaTable.Columns[1].Width = colWide;
+                diaTable.Rows.Cast<Row>().ToList().ForEach(r => r.Height = rowH);
+
+                string hdrCap = "Ø";
+                string hdrLen = lang == "rus" ? "Длина, м" : (lang == "re" ? "Len/Дл, m" : "Length, m");
+                diaTable.Cells[0, 0].TextString = hdrCap;
+                diaTable.Cells[0, 1].TextString = hdrLen;
+                diaTable.Cells[0, 0].Alignment = CellAlignment.MiddleCenter;
+                diaTable.Cells[0, 1].Alignment = CellAlignment.MiddleCenter;
+
+                for (int i = 0; i < capListe.Count; i++)
+                {
+                    var row = i + 1;
+                    double lenM = capListe[i].TotalLength * 0.001; // предполагаем мм -> м
+                    diaTable.Cells[row, 0].TextString = capListe[i].Cap;
+                    diaTable.Cells[row, 1].TextString = lenM.ToString("0.###", CultureInfo.InvariantCulture);
+                    diaTable.Cells[row, 0].Alignment = CellAlignment.MiddleCenter;
+                    diaTable.Cells[row, 1].Alignment = CellAlignment.MiddleRight;
+                }
+
+                diaTable.Position = yerlesim;
+                diaTable.GenerateLayout();
+                btr.AppendEntity(diaTable);
+                tr.AddNewlyCreatedDBObject(diaTable, true);
+
+                // ------------------------------
+                // 2. Таблица детализации по позициям
+                // ------------------------------
+                Table posTable = new Table
+                {
+                    TableStyle = db.Tablestyle,
+                    Layer = "ren.mtr.bar"
+                };
+
+                // Колонки: POZ, Ø, QTY, SPC, L, TIP, A, B, C, D, E, F, R, Tot(m)
+                string[] headers = lang switch
+                {
+                    "rus" => new[] { "ПОЗ", "Ø", "К-во", "Шаг", "Длина", "Тип", "A", "B", "C", "D", "E", "F", "R", "Итог, м" },
+                    "re"  => new[] { "POZ", "Ø", "Qty", "Step", "Len", "Tip", "A", "B", "C", "D", "E", "F", "R", "Tot m" },
+                    _     => new[] { "POZ", "Ø", "Qty", "Step", "Len", "Tip", "A", "B", "C", "D", "E", "F", "R", "Tot m" }
+                };
+
+                int posRows = Math.Max(toplamBilgi.Count + 1, 2);
+                posTable.SetSize(posRows, headers.Length);
+
+                // Ширины столбцов
+                for (int c = 0; c < headers.Length; c++)
+                {
+                    if (c == 4 || c == headers.Length - 1)
+                        posTable.Columns[c].Width = colWide;
+                    else
+                        posTable.Columns[c].Width = colSmall;
+                }
+                posTable.Rows.Cast<Row>().ToList().ForEach(r => r.Height = rowH);
+
+                for (int c = 0; c < headers.Length; c++)
+                {
+                    posTable.Cells[0, c].TextString = headers[c];
+                    posTable.Cells[0, c].Alignment = CellAlignment.MiddleCenter;
+                }
+
+                for (int i = 0; i < toplamBilgi.Count; i++)
+                {
+                    var row = i + 1;
+                    var it = toplamBilgi[i];
+                    double adet = int.TryParse(it.Adet, out var a) ? a : 0;
+                    double lenM = adet * it.BoyInt * 0.001; // мм -> м
+
+                    string[] vals =
+                    {
+                        it.Poz,
+                        it.Cap,
+                        it.Adet,
+                        it.Aralik,
+                        it.Boy,
+                        it.Tip,
+                        it.A, it.B, it.C, it.D, it.E, it.F, it.R,
+                        lenM.ToString("0.###", CultureInfo.InvariantCulture)
+                    };
+
+                    for (int c = 0; c < headers.Length; c++)
+                    {
+                        posTable.Cells[row, c].TextString = vals[c];
+                        posTable.Cells[row, c].Alignment = c switch
+                        {
+                            0 or 1 or 5 => CellAlignment.MiddleCenter,
+                            _ => CellAlignment.MiddleRight
+                        };
+                    }
+                }
+
+                // Размещаем под первой таблицей
+                Point3d pos = new Point3d(yerlesim.X, yerlesim.Y - diaTable.Height - gap, 0);
+                posTable.Position = pos;
+                posTable.GenerateLayout();
+                btr.AppendEntity(posTable);
+                tr.AddNewlyCreatedDBObject(posTable, true);
+
+                tr.Commit();
+            }
         }
     }
 }

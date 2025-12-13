@@ -33,6 +33,9 @@ namespace PoseEdit2026
             // 3. Подписываемся на события для автоматического обновления полей
             SetupEventHandlers();
 
+            // 3.1. Инициализируем группу Tik из настроек
+            InitTikGroup();
+
             // 4. Только потом разрешаем событиям работать
             _isLoading = false;
 
@@ -194,6 +197,24 @@ namespace PoseEdit2026
             txtDiameter.TextChanged += (s, e) => UpdatePoseImage();
             txtSpace.TextChanged += (s, e) => UpdatePoseImage();
             txtLength.TextChanged += (s, e) => UpdatePoseImage();
+
+            // Сохраняем настройки Tik при изменении
+            if (txtTik != null)
+            {
+                txtTik.TextChanged += (s, e) =>
+                {
+                    if (int.TryParse(txtTik.Text.Trim(), out int v))
+                        AppSettings.TikValue = v;
+                };
+            }
+            if (rbTik0 != null)
+            {
+                rbTik0.Checked += (s, e) => AppSettings.TikMode = 0;
+            }
+            if (rbTik1 != null)
+            {
+                rbTik1.Checked += (s, e) => AppSettings.TikMode = 1;
+            }
         }
 
         // ====================================================================================
@@ -383,6 +404,23 @@ namespace PoseEdit2026
             catch (Exception ex)
             {
                 MessageBox.Show("Error in LoadDataFromBlock: " + ex.Message);
+            }
+        }
+
+        private void InitTikGroup()
+        {
+            if (txtTik != null)
+                txtTik.Text = AppSettings.TikValue.ToString();
+            if (rbTik0 != null && rbTik1 != null)
+            {
+                if (AppSettings.TikMode == 0)
+                {
+                    rbTik0.IsChecked = true;
+                }
+                else
+                {
+                    rbTik1.IsChecked = true;
+                }
             }
         }
 
@@ -919,8 +957,125 @@ namespace PoseEdit2026
             }
         }
 
-        private void btnUpdateAll_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
-        private void btnRead_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
+        private void btnUpdateAll_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 1. Формируем данные из формы (так же, как в Update)
+                string tbResult = "";
+                if (!string.IsNullOrEmpty(txtItemMult.Text))
+                    tbResult += txtItemMult.Text + "x";
+                tbResult += txtItem.Text + "Ø" + txtDiameter.Text;
+                if (!string.IsNullOrWhiteSpace(txtSpace.Text))
+                    tbResult += "/" + txtSpace.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(txtLength.Text))
+                {
+                    string lengthValue = txtLength.Text.Trim();
+                    tbResult += lengthValue.StartsWith("L=", StringComparison.OrdinalIgnoreCase)
+                        ? " " + lengthValue
+                        : " L=" + lengthValue;
+                }
+                if (!string.IsNullOrWhiteSpace(txtNote.Text))
+                    tbResult += " " + txtNote.Text.Trim();
+
+                var newValues = new Dictionary<string, string>
+                {
+                    ["POZ"] = txtPose.Text,
+                    ["TB"] = tbResult,
+                    ["TIP"] = txtType.Text,
+                    ["A"] = GetValueOrTag(txtA),
+                    ["B"] = GetValueOrTag(txtB),
+                    ["C"] = GetValueOrTag(txtC),
+                    ["D"] = GetValueOrTag(txtD),
+                    ["E"] = GetValueOrTag(txtE),
+                    ["F"] = GetValueOrTag(txtF),
+                    ["R"] = GetValueOrTag(txtR)
+                };
+
+                if (!string.IsNullOrWhiteSpace(txtSpace.Text))
+                    newValues["ARALIK"] = txtSpace.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(txtNote.Text))
+                    newValues["NOTE"] = txtNote.Text.Trim();
+
+                // 2. Выбираем несколько блоков RL-POS
+                this.Hide();
+                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
+                TypedValue[] filterValues = new TypedValue[]
+                {
+                    new TypedValue((int)DxfCode.Start, "INSERT"),
+                    new TypedValue((int)DxfCode.BlockName, "RL-POS*")
+                };
+                SelectionFilter filter = new SelectionFilter(filterValues);
+                PromptSelectionOptions selOpts = new PromptSelectionOptions();
+                selOpts.MessageForAdding = "\nSelect RL-POS blocks to update:";
+
+                PromptSelectionResult selRes = ed.GetSelection(selOpts, filter);
+                if (selRes.Status != PromptStatus.OK || selRes.Value.Count == 0)
+                {
+                    MessageBox.Show("Блоки RL-POS не выбраны.");
+                    return;
+                }
+
+                int updated = 0;
+                foreach (ObjectId id in selRes.Value.GetObjectIds())
+                {
+                    BlockHelper.SetAttributes(id, newValues);
+                    updated++;
+                }
+
+                MessageBox.Show($"Обновлено блоков: {updated}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error in Update All: " + ex.Message);
+            }
+            finally
+            {
+                this.ShowDialog();
+            }
+        }
+        private void btnRead_Click(object sender, RoutedEventArgs e)
+        {
+            this.Hide();
+            try
+            {
+                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
+                PromptEntityOptions opt = new PromptEntityOptions("\nSelect RL-POS block:");
+                opt.SetRejectMessage("\nInvalid object. Select block with attributes.");
+                opt.AddAllowedClass(typeof(BlockReference), true);
+
+                PromptEntityResult res = ed.GetEntity(opt);
+                if (res.Status != PromptStatus.OK) return;
+
+                // Проверяем, что это блок с атрибутами (желательно RL-POS)
+                using (Transaction tr = res.ObjectId.Database.TransactionManager.StartTransaction())
+                {
+                    if (tr.GetObject(res.ObjectId, OpenMode.ForRead) is BlockReference br)
+                    {
+                        // По возможности фильтруем по имени блока
+                        string name = br.Name?.ToUpperInvariant() ?? "";
+                        if (!name.Contains("RL-POS") && br.AttributeCollection.Count == 0)
+                        {
+                            MessageBox.Show("Выберите блок RL-POS с атрибутами.");
+                            return;
+                        }
+                    }
+                    tr.Commit();
+                }
+
+                _currentBlockId = res.ObjectId;
+                LoadDataFromBlock();
+                UpdateShapeImage();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error reading block: " + ex.Message);
+            }
+            finally
+            {
+                this.ShowDialog();
+            }
+        }
 
         // ====================================================================================
         // ОБРАБОТЧИК: btnSettings_Click
