@@ -33,8 +33,8 @@ namespace PoseEdit2026
             // 3. Подписываемся на события для автоматического обновления полей
             SetupEventHandlers();
 
-            // 3.1. Инициализируем группу Tik из настроек
-            InitTikGroup();
+            //// 3.1. Инициализируем группу Tik из настроек
+            //InitTikGroup();
 
             // 4. Только потом разрешаем событиям работать
             _isLoading = false;
@@ -198,23 +198,23 @@ namespace PoseEdit2026
             txtSpace.TextChanged += (s, e) => UpdatePoseImage();
             txtLength.TextChanged += (s, e) => UpdatePoseImage();
 
-            // Сохраняем настройки Tik при изменении
-            if (txtTik != null)
-            {
-                txtTik.TextChanged += (s, e) =>
-                {
-                    if (int.TryParse(txtTik.Text.Trim(), out int v))
-                        AppSettings.TikValue = v;
-                };
-            }
-            if (rbTik0 != null)
-            {
-                rbTik0.Checked += (s, e) => AppSettings.TikMode = 0;
-            }
-            if (rbTik1 != null)
-            {
-                rbTik1.Checked += (s, e) => AppSettings.TikMode = 1;
-            }
+            //// Сохраняем настройки Tik при изменении
+            //if (txtTik != null)
+            //{
+            //    txtTik.TextChanged += (s, e) =>
+            //    {
+            //        if (int.TryParse(txtTik.Text.Trim(), out int v))
+            //            AppSettings.TikValue = v;
+            //    };
+            //}
+            //if (rbTik0 != null)
+            //{
+            //    rbTik0.Checked += (s, e) => AppSettings.TikMode = 0;
+            //}
+            //if (rbTik1 != null)
+            //{
+            //    rbTik1.Checked += (s, e) => AppSettings.TikMode = 1;
+            //}
         }
 
         // ====================================================================================
@@ -407,22 +407,22 @@ namespace PoseEdit2026
             }
         }
 
-        private void InitTikGroup()
-        {
-            if (txtTik != null)
-                txtTik.Text = AppSettings.TikValue.ToString();
-            if (rbTik0 != null && rbTik1 != null)
-            {
-                if (AppSettings.TikMode == 0)
-                {
-                    rbTik0.IsChecked = true;
-                }
-                else
-                {
-                    rbTik1.IsChecked = true;
-                }
-            }
-        }
+        //private void InitTikGroup()
+        //{
+        //    if (txtTik != null)
+        //        txtTik.Text = AppSettings.TikValue.ToString();
+        //    if (rbTik0 != null && rbTik1 != null)
+        //    {
+        //        if (AppSettings.TikMode == 0)
+        //        {
+        //            rbTik0.IsChecked = true;
+        //        }
+        //        else
+        //        {
+        //            rbTik1.IsChecked = true;
+        //        }
+        //    }
+        //}
 
         private void SetValueOrTag(TextBox box, string val)
         {
