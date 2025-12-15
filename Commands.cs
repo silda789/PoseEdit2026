@@ -18,6 +18,8 @@ using Autodesk.AutoCAD.EditorInput; // Взаимодействие с поль�
 using Autodesk.AutoCAD.Geometry; // Геометрия (Point3d, Scale3d)
 using Autodesk.AutoCAD.Colors; // Цвета (Color)
 
+
+
 namespace PoseEdit2026
 {
     // Этот класс не обязательно должен быть static, но методы команд должны быть public.
