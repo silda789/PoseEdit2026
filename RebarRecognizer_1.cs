@@ -614,16 +614,9 @@ namespace PoseEdit2026
 
         private static double GetDrawingScaleSafe()
         {
-            try
-            {
-                object dimlfacObj = Application.GetSystemVariable("DIMLFAC");
-                double sc = dimlfacObj == null ? 1.0 : Convert.ToDouble(dimlfacObj);
-                return sc == 0 ? 1.0 : sc;
-            }
-            catch
-            {
-                return 1.0;
-            }
+            // Мы используем настройки из AppSettings.DrawingUnit (1000 для мм, 100 для см, 1 для м)
+            // Коэффициент пересчета в миллиметры: 1000 / DrawingUnit
+            return 1000.0 / AppSettings.DrawingUnit;
         }
     }
 }

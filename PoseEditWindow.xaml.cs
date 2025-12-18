@@ -1,10 +1,12 @@
-﻿#nullable disable
+#nullable disable
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Linq; // Для Enumerable.Range и других LINQ методов
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -780,14 +782,24 @@ namespace PoseEdit2026
                         else if (ent is Dimension d)
                         {
                             prop = "Measurement";
-                            try { val = (double)ent.GetType().GetProperty("Measurement").GetValue(ent); } catch { }
+                            try { val = d.Measurement; } catch { }
                         }
                         tr.Commit();
                     }
 
-                    string fieldCode = string.Format("%<\\AcObjProp Object(%<\\_ObjId {0}>%).{1} \\f \"%lu2%pr0\">%", objId.OldIdPtr, prop);
+                    // Применяем коэффициент пересчета из единиц чертежа в миллиметры
+                    // Например, если чертеж в метрах, умножаем на 1000
+                    double unitMultiplier = 1000.0 / AppSettings.DrawingUnit;
+                    val *= unitMultiplier;
+
+                    // Формируем код поля с учетом коэффициента пересчета (%ca)
+                    // %lu2 - десятичные, %pr0 - 0 знаков после запятой, %ca - множитель
+                    string fieldCode = string.Format("%<\\AcObjProp Object(%<\\_ObjId {0}>%).{1} \\f \"%lu2%pr0%ca{2}\">%", 
+                        objId.OldIdPtr, prop, unitMultiplier.ToString(CultureInfo.InvariantCulture));
 
                     targetBox.Text = val.ToString("0");
+                    targetBox.Tag = fieldCode;
+                    targetBox.Background = Brushes.LightYellow;
                     targetBox.Tag = fieldCode;
                     targetBox.Background = Brushes.LightYellow;
                 }
@@ -888,7 +900,9 @@ namespace PoseEdit2026
                 }
 
                 // Количество стержней: округление к ближайшему (0.5 вверх), минимум 1
-                double raw = len / space;
+                // Учитываем коэффициент пересчета единиц в миллиметры
+                double unitMultiplier = 1000.0 / AppSettings.DrawingUnit;
+                double raw = (len * unitMultiplier) / space;
                 int count = Math.Max(1, (int)Math.Round(raw, MidpointRounding.AwayFromZero));
                 txtItem.Tag = null;
                 txtItem.Background = Brushes.White;
@@ -1017,9 +1031,23 @@ namespace PoseEdit2026
                 }
 
                 int updated = 0;
+                double currentScale = AppSettings.SheetScale; // Получаем текущий масштаб из настроек
+
                 foreach (ObjectId id in selRes.Value.GetObjectIds())
                 {
+                    // 1. Обновляем атрибуты
                     BlockHelper.SetAttributes(id, newValues);
+
+                    // 2. Обновляем масштаб блока
+                    using (Transaction tr = id.Database.TransactionManager.StartTransaction())
+                    {
+                        BlockReference br = tr.GetObject(id, OpenMode.ForWrite) as BlockReference;
+                        if (br != null)
+                        {
+                            br.ScaleFactors = new Scale3d(currentScale, currentScale, currentScale);
+                        }
+                        tr.Commit();
+                    }
                     updated++;
                 }
 

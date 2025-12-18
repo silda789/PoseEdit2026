@@ -1,4 +1,4 @@
-﻿// #nullable disable — отключаем строгую проверку на null (пустые значения).
+// #nullable disable — отключаем строгую проверку на null (пустые значения).
 // В .NET 8 это включено по умолчанию, и без этой строки будет много желтых предупреждений,
 // которые новичку только мешают.
 #nullable disable
@@ -128,8 +128,8 @@ namespace PoseEdit2026
 
                     // --- ВСТАВКА ИЗ РЕСУРСОВ ---
                     // Вызываем наш метод ImportBlockFromResource.
-                    // Он достанет файл из DLL и вставит его в чертеж.
-                    blockId = ImportBlockFromResource(db, ResourceName1, insertPoint, 1.0);
+                    // Теперь передаем реальный масштаб из настроек!
+                    blockId = ImportBlockFromResource(db, ResourceName1, insertPoint, GetScaleSafe());
 
                     // Если метод вернул Null, значит произошла ошибка (например, неправильное имя ресурса)
                     if (blockId == ObjectId.Null)
@@ -144,17 +144,25 @@ namespace PoseEdit2026
                 PoseEditWindow win = new PoseEditWindow(blockId);
 
                 // ShowModalWindow — это специальный метод AutoCAD для запуска WPF окон.
-                // Он блокирует AutoCAD, пока окно открыто.
-                // Возвращает bool? (true, false или null).
-                // true = мы закрыли окно через this.DialogResult = true (кнопка Update).
                 bool? result = Application.ShowModalWindow(win);
 
                 // Если пользователь нажал "Update Pose"
                 if (result == true)
                 {
+                    // Обновляем масштаб блока в соответствии с текущими настройками чертежа
+                    // Это гарантирует, что блок будет соразмерен масштабу (например, 1:50)
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                    {
+                        BlockReference br = tr.GetObject(blockId, OpenMode.ForWrite) as BlockReference;
+                        if (br != null)
+                        {
+                            double currentScale = GetScaleSafe();
+                            br.ScaleFactors = new Scale3d(currentScale, currentScale, currentScale);
+                        }
+                        tr.Commit();
+                    }
+
                     // Если блок был НОВЫМ, нужно дать пользователю повернуть его.
-                    // В .NET сложно сделать интерактивный поворот (Jig), поэтому мы просто
-                    // вызываем стандартную команду _.ROTATE.
                     if (isNewBlock)
                     {
                         ed.Command("_.ROTATE", blockId, "", insertPoint);
@@ -1227,8 +1235,8 @@ namespace PoseEdit2026
                 if (!attrs.TryGetValue("TB", out var tbTag)) tbTag = "";
                 if (!attrs.TryGetValue("NOT", out var notTag)) notTag = "";
 
-                // Определяем масштаб: ins_scale = (OLCEK_OKU / BIRIM_OKU) * 100
-                double insScale = (GetScaleSafe() / GetUnitsSafe()) * 100.0;
+                // Определяем масштаб для вставки выноски
+                double insScale = GetScaleSafe();
 
                 // Поворот берем у исходного блока
                 double rotationDeg = 0;
