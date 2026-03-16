@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
-using System.Globalization;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -250,57 +249,70 @@ namespace PoseEdit2026
 
         /// <summary>
         /// Группирует одинаковые позиции (объединяет количество)
+        /// Аналог функции RENAISSANCE_toplam_bilgi_derle
         /// </summary>
         private static List<RebarPositionInfo> GroupRebarData(List<RebarPositionInfo> data)
         {
-            if (data == null || data.Count == 0) return new List<RebarPositionInfo>();
+            List<RebarPositionInfo> result = new List<RebarPositionInfo>();
 
-            return data
-                .GroupBy(x => new { x.Poz, x.Cap, x.Boy, x.Tip, x.A, x.B, x.C, x.D, x.E, x.F, x.R })
-                .Select(g =>
+            for (int i = 0; i < data.Count; i++)
+            {
+                if (i < data.Count - 1 &&
+                    data[i].Poz == data[i + 1].Poz &&
+                    data[i].Cap == data[i + 1].Cap &&
+                    data[i].Boy == data[i + 1].Boy)
                 {
-                    var first = g.First();
-                    int totalAdet = g.Sum(x => int.TryParse(x.Adet, out int a) ? a : 0);
-                    return new RebarPositionInfo
-                    {
-                        Cntr = first.Cntr,
-                        Poz = first.Poz,
-                        Adet = totalAdet.ToString(),
-                        Cap = first.Cap,
-                        Aralik = first.Aralik,
-                        Boy = first.Boy,
-                        Tip = first.Tip,
-                        A = first.A,
-                        B = first.B,
-                        C = first.C,
-                        D = first.D,
-                        E = first.E,
-                        F = first.F,
-                        R = first.R,
-                        BoyInt = first.BoyInt,
-                        Malzeme = first.Malzeme
-                    };
-                })
-                .OrderBy(x => int.TryParse(x.Poz, out int poz) ? poz : 9999)
-                .ToList();
+                    // Объединяем количество
+                    int adet1 = int.TryParse(data[i].Adet, out int a1) ? a1 : 0;
+                    int adet2 = int.TryParse(data[i + 1].Adet, out int a2) ? a2 : 0;
+                    data[i].Adet = (adet1 + adet2).ToString();
+                    i++; // Пропускаем следующий элемент
+                }
+
+                result.Add(data[i]);
+            }
+
+            return result;
         }
 
         /// <summary>
         /// Создает список диаметров с суммарными длинами
+        /// Аналог функции cap_bilgi_olustur
         /// </summary>
         private static List<DiameterInfo> CreateDiameterList(List<RebarPositionInfo> data)
         {
-            if (data == null || data.Count == 0) return new List<DiameterInfo>();
+            // Создаем список для каждого элемента
+            List<DiameterInfo> tempList = new List<DiameterInfo>();
 
-            return data
-                .GroupBy(x => x.Cap)
-                .Select(g => new DiameterInfo
+            foreach (var item in data)
+            {
+                int adet = int.TryParse(item.Adet, out int a) ? a : 0;
+                double toplamBoy = adet * item.BoyInt;
+
+                tempList.Add(new DiameterInfo
                 {
-                    Cap = g.Key,
-                    TotalLength = g.Sum(x => (int.TryParse(x.Adet, out int a) ? a : 0) * (double)x.BoyInt)
-                })
-                .OrderBy(x => int.TryParse(x.Cap, out int cap) ? cap : 9999)
-                .ToList();
+                    Cap = item.Cap,
+                    TotalLength = toplamBoy
+                });
+            }
+
+            // Сортируем по диаметру
+            tempList = tempList.OrderBy(x => int.TryParse(x.Cap, out int cap) ? cap : 9999).ToList();
+
+            // Группируем одинаковые диаметры и суммируем длины
+            List<DiameterInfo> result = new List<DiameterInfo>();
+            for (int i = 0; i < tempList.Count; i++)
+            {
+                if (i < tempList.Count - 1 && tempList[i].Cap == tempList[i + 1].Cap)
+                {
+                    // Объединяем одинаковые диаметры
+                    tempList[i].TotalLength += tempList[i + 1].TotalLength;
+                    i++; // Пропускаем следующий элемент
+                }
+                result.Add(tempList[i]);
+            }
+
+            return result;
         }
 
         // ====================================================================================
@@ -316,39 +328,24 @@ namespace PoseEdit2026
             if (fiIndex == -1) fiIndex = tb.IndexOf("%%C");
             if (fiIndex == -1) fiIndex = tb.IndexOf("%%c");
 
-            if (fiIndex >= 0)
+            if (fiIndex > 0)
             {
                 string leftPart = tb.Substring(0, fiIndex).ToUpper();
-                
-                // Если есть 'x', перемножаем все числа (например, "2x10" -> 20)
                 if (leftPart.Contains("X"))
                 {
                     string[] parts = leftPart.Split('X');
-                    int total = 1;
-                    bool found = false;
-                    foreach (var p in parts)
-                    {
-                        string numStr = new string(p.Where(char.IsDigit).ToArray());
-                        if (int.TryParse(numStr, out int val))
-                        {
-                            total *= val;
-                            found = true;
-                        }
-                    }
-                    return found ? total : 1;
-                }
-                else
-                {
-                    // Пытаемся найти число во всей левой части (например, "20")
-                    string countStr = new string(leftPart.Where(char.IsDigit).ToArray());
-                    if (int.TryParse(countStr, out int adet))
+                    if (parts.Length == 2 && int.TryParse(parts[1], out int adet))
                     {
                         return adet;
                     }
                 }
-                
-                // Если число не найдено, но Ø есть, значит количество 1 (например, "SØ12")
-                return 1;
+                else
+                {
+                    if (int.TryParse(leftPart, out int adet))
+                    {
+                        return adet;
+                    }
+                }
             }
 
             return 0;
@@ -373,12 +370,11 @@ namespace PoseEdit2026
 
             if (fiIndex >= 0)
             {
-                string rest = tb.Substring(fiIndex + fiLength);
-                // Читаем цифры после символа диаметра
-                string capStr = new string(rest.TakeWhile(char.IsDigit).ToArray());
-                if (!string.IsNullOrEmpty(capStr))
+                int slashIndex = tb.IndexOf("/", fiIndex);
+                if (slashIndex > fiIndex)
                 {
-                    return capStr;
+                    string capStr = tb.Substring(fiIndex + fiLength, slashIndex - fiIndex - fiLength);
+                    return capStr.Trim();
                 }
             }
 
@@ -392,10 +388,7 @@ namespace PoseEdit2026
             int slashIndex = tb.IndexOf("/");
             if (slashIndex >= 0 && slashIndex < tb.Length - 1)
             {
-                string rest = tb.Substring(slashIndex + 1);
-                // Читаем цифры после косой черты
-                string aralikStr = new string(rest.TakeWhile(char.IsDigit).ToArray());
-                return aralikStr;
+                return tb.Substring(slashIndex + 1).Trim();
             }
 
             return "";
@@ -405,24 +398,10 @@ namespace PoseEdit2026
         {
             if (string.IsNullOrEmpty(boy)) return 0;
 
-            // Извлекаем только первое число из строки (например, "L=2260 (2265)" -> 2260)
-            string digits = "";
-            bool foundDigit = false;
-            foreach (char c in boy)
-            {
-                if (char.IsDigit(c))
-                {
-                    digits += c;
-                    foundDigit = true;
-                }
-                else if (foundDigit)
-                {
-                    // Если уже нашли цифры и встретили не-цифру, прерываем (конец первого числа)
-                    break;
-                }
-            }
+            // Убираем "L=" и другие символы
+            boy = boy.Replace("L=", "").Replace("l=", "").Replace("(", "").Replace(")", "").Replace("~", "").Trim();
 
-            if (int.TryParse(digits, out int result))
+            if (int.TryParse(boy, out int result))
             {
                 return result;
             }
@@ -436,41 +415,55 @@ namespace PoseEdit2026
 
         /// <summary>
         /// Получает путь к папке настроек (client_path)
+        /// В LISP это глобальная переменная, здесь мы используем путь к папке с программой
+        /// Сначала проверяем папку Temp (для разработки), потом Standard рядом с DLL
         /// </summary>
         private static string GetClientPath()
         {
-            try
+            // 1. Проверяем папку Temp рядом с DLL (для разработки и тестирования)
+            string assemblyDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string tempPath = Path.Combine(Path.GetDirectoryName(assemblyDir) ?? assemblyDir, "Temp");
+            if (!Directory.Exists(tempPath))
             {
-                // 1. Проверяем папку Temp рядом с исполняемым файлом (для разработки)
-                string assemblyPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                string tempPath = Path.Combine(assemblyPath, "Temp");
-                if (Directory.Exists(tempPath))
+                // Альтернативный путь: ищем Temp рядом с исходниками проекта
+                string projectDir = Path.GetDirectoryName(assemblyDir);
+                while (projectDir != null)
+                {
+                    string candidate = Path.Combine(projectDir, "Temp");
+                    if (Directory.Exists(candidate)) { tempPath = candidate; break; }
+                    projectDir = Path.GetDirectoryName(projectDir);
+                }
+            }
+            if (Directory.Exists(tempPath))
+            {
+                if (File.Exists(Path.Combine(tempPath, "UNIT.TXT")) ||
+                    File.Exists(Path.Combine(tempPath, "TABLO_DILI.TXT")))
                 {
                     return tempPath + Path.DirectorySeparatorChar;
                 }
+            }
 
-                // 2. Папка Standard рядом с DLL
-                string standardPath = Path.Combine(assemblyPath, "Standard");
-                if (Directory.Exists(standardPath))
-                {
-                    return assemblyPath + Path.DirectorySeparatorChar;
-                }
-
-                // 3. Папка пользователя
-                string userPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "PoseEdit2026");
-                if (Directory.Exists(userPath))
-                {
-                    return userPath + Path.DirectorySeparatorChar;
-                }
-
+            // 2. Пытаемся найти папку Standard рядом с DLL
+            string assemblyPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string standardPath = Path.Combine(assemblyPath, "Standard");
+            
+            if (Directory.Exists(standardPath))
+            {
                 return assemblyPath + Path.DirectorySeparatorChar;
             }
-            catch
+
+            // 3. Альтернативный путь - папка пользователя
+            string userPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "PoseEdit2026", "Standard");
+            
+            if (Directory.Exists(userPath))
             {
-                return AppDomain.CurrentDomain.BaseDirectory;
+                return Path.GetDirectoryName(userPath) + Path.DirectorySeparatorChar;
             }
+
+            // 4. Если ничего не найдено, возвращаем путь к DLL
+            return assemblyPath + Path.DirectorySeparatorChar;
         }
 
         /// <summary>
@@ -796,176 +789,20 @@ namespace PoseEdit2026
 
         private static void DrawTablesRussian(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
         {
-            DrawTablesGeneric(yerlesim, capListe, toplamBilgi, olcek, "rus");
+            // TODO: Реализовать рисование таблиц на русском языке
+            // Аналог функции RENAISSANCE_metraj_tablo_ciz_rus
         }
 
         private static void DrawTablesEnglish(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
         {
-            DrawTablesGeneric(yerlesim, capListe, toplamBilgi, olcek, "eng");
+            // TODO: Реализовать рисование таблиц на английском языке
+            // Аналог функции RENAISSANCE_metraj_tablo_ciz_eng
         }
 
         private static void DrawTablesRussianEnglish(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
         {
-            DrawTablesGeneric(yerlesim, capListe, toplamBilgi, olcek, "re");
-        }
-
-        /// <summary>
-        /// Построение таблиц в виде примитивов (Line, DBText).
-        /// Размеры рассчитываются в мм на бумаге и умножаются на масштаб.
-        /// </summary>
-        private static void DrawTablesGeneric(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcekMultiplier, string lang)
-        {
-            Document doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            Database db = doc.Database;
-
-            // Коэффициент масштаба (например, 50 для 1:50)
-            double scale = GetScale();
-            
-            // Размеры в мм на бумаге
-            double paperTextHData = 3.0;   // 3мм обычный текст
-            double paperTextHHeader = 5.0; // 5мм заголовок проекта
-            double paperRowH = 8.0;        // 8мм высота строки (стандарт)
-
-            // Конвертация в единицы модели
-            double textHData = paperTextHData * scale;
-            double textHHeader = paperTextHHeader * scale;
-            double rowH = paperRowH * scale;
-
-            // Компактные ширины столбцов в мм на бумаге
-            double[] paperColWidths = { 
-                12,  // ПОЗ
-                10,  // Ø
-                12,  // К-во
-                12,  // Шаг
-                22,  // Длина
-                10,  // Тип
-                12, 12, 12, 12, 12, 12, 12, // A-R (размеры гибки)
-                22   // Итог
-            };
-            double[] colWidths = paperColWidths.Select(w => w * scale).ToArray();
-
-            using (Transaction tr = db.TransactionManager.StartTransaction())
-            {
-                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-
-                // --- 1. ТАБЛИЦА СВОДКИ ПО ДИАМЕТРАМ ---
-                string hdrCap = "Ø";
-                string hdrLen = lang == "rus" ? "Длина, м" : (lang == "re" ? "Len/Дл, m" : "Length, m");
-                
-                Point3d currentPt = yerlesim;
-                double diaColW1 = 15 * scale;
-                double diaColW2 = 30 * scale;
-
-                string projName = AppSettings.ProjectName;
-                if (!string.IsNullOrWhiteSpace(projName))
-                {
-                    DrawCell(btr, tr, currentPt, diaColW1 + diaColW2, rowH * 1.2, projName, textHHeader, true);
-                    currentPt = new Point3d(currentPt.X, currentPt.Y - rowH * 1.2, 0);
-                }
-
-                // Заголовки сводки
-                DrawCell(btr, tr, currentPt, diaColW1, rowH, hdrCap, textHData, true);
-                DrawCell(btr, tr, new Point3d(currentPt.X + diaColW1, currentPt.Y, 0), diaColW2, rowH, hdrLen, textHData, true);
-                currentPt = new Point3d(currentPt.X, currentPt.Y - rowH, 0);
-
-                foreach (var info in capListe)
-                {
-                    double lenM = info.TotalLength * 0.001;
-                    DrawCell(btr, tr, currentPt, diaColW1, rowH, info.Cap, textHData, false);
-                    DrawCell(btr, tr, new Point3d(currentPt.X + diaColW1, currentPt.Y, 0), diaColW2, rowH, lenM.ToString("0.###", CultureInfo.InvariantCulture), textHData, false);
-                    currentPt = new Point3d(currentPt.X, currentPt.Y - rowH, 0);
-                }
-
-                // --- 2. ТАБЛИЦА ДЕТАЛИЗАЦИИ ПО ПОЗИЦИЯМ ---
-                currentPt = new Point3d(yerlesim.X, currentPt.Y - (rowH * 2), 0); // Отступ между таблицами
-                double totalMainW = colWidths.Sum();
-
-                if (!string.IsNullOrWhiteSpace(projName))
-                {
-                    DrawCell(btr, tr, currentPt, totalMainW, rowH * 1.2, projName, textHHeader, true);
-                    currentPt = new Point3d(currentPt.X, currentPt.Y - rowH * 1.2, 0);
-                }
-
-                string[] headers = lang switch
-                {
-                    "rus" => new[] { "ПОЗ", "Ø", "К-во", "Шаг", "Длина", "Тип", "A", "B", "C", "D", "E", "F", "R", "Итог, м" },
-                    "re"  => new[] { "POZ", "Ø", "Qty", "Step", "Len", "Tip", "A", "B", "C", "D", "E", "F", "R", "Tot m" },
-                    _     => new[] { "POZ", "Ø", "Qty", "Step", "Len", "Tip", "A", "B", "C", "D", "E", "F", "R", "Tot m" }
-                };
-
-                // Заголовки основной таблицы
-                double xCoord = currentPt.X;
-                for (int i = 0; i < headers.Length; i++)
-                {
-                    DrawCell(btr, tr, new Point3d(xCoord, currentPt.Y, 0), colWidths[i], rowH, headers[i], textHData, true);
-                    xCoord += colWidths[i];
-                }
-                currentPt = new Point3d(currentPt.X, currentPt.Y - rowH, 0);
-
-                // Данные основной таблицы
-                foreach (var it in toplamBilgi)
-                {
-                    double adetValue = int.TryParse(it.Adet, out var a) ? a : 0;
-                    double totalLenM = adetValue * it.BoyInt * 0.001;
-
-                    string[] vals = { 
-                        it.Poz, 
-                        it.Cap, 
-                        it.Adet, 
-                        it.Aralik == "0" ? "-" : it.Aralik, 
-                        it.Boy, 
-                        it.Tip, 
-                        it.A, it.B, it.C, it.D, it.E, it.F, it.R, 
-                        totalLenM.ToString("0.###", CultureInfo.InvariantCulture) 
-                    };
-
-                    xCoord = currentPt.X;
-                    for (int i = 0; i < vals.Length; i++)
-                    {
-                        DrawCell(btr, tr, new Point3d(xCoord, currentPt.Y, 0), colWidths[i], rowH, vals[i], textHData, false);
-                        xCoord += colWidths[i];
-                    }
-                    currentPt = new Point3d(currentPt.X, currentPt.Y - rowH, 0);
-                }
-
-                tr.Commit();
-            }
-        }
-
-        /// <summary>
-        /// Вспомогательный метод для отрисовки ячейки (линии + текст)
-        /// </summary>
-        private static void DrawCell(BlockTableRecord btr, Transaction tr, Point3d topLeft, double w, double h, string text, double textH, bool isHeader)
-        {
-            // Прямоугольник (линии)
-            Point3d p1 = topLeft;
-            Point3d p2 = new Point3d(topLeft.X + w, topLeft.Y, 0);
-            Point3d p3 = new Point3d(topLeft.X + w, topLeft.Y - h, 0);
-            Point3d p4 = new Point3d(topLeft.X, topLeft.Y - h, 0);
-
-            Line[] lines = { new Line(p1, p2), new Line(p2, p3), new Line(p3, p4), new Line(p4, p1) };
-
-            foreach (var l in lines)
-            {
-                l.Layer = "ren.mtr.layer_l1";
-                btr.AppendEntity(l);
-                tr.AddNewlyCreatedDBObject(l, true);
-            }
-
-            // Текст
-            if (!string.IsNullOrEmpty(text))
-            {
-                DBText dbText = new DBText();
-                dbText.Height = textH;
-                dbText.TextString = text;
-                dbText.Layer = "ren.mtr.layer_t1";
-                dbText.Justify = AttachmentPoint.MiddleCenter;
-                dbText.AlignmentPoint = new Point3d(topLeft.X + w / 2.0, topLeft.Y - h / 2.0, 0);
-                
-                btr.AppendEntity(dbText);
-                tr.AddNewlyCreatedDBObject(dbText, true);
-            }
+            // TODO: Реализовать рисование таблиц на русском и английском языках
+            // Аналог функции RENAISSANCE_metraj_tablo_ciz_re
         }
     }
 }

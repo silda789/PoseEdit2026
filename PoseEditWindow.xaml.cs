@@ -2,11 +2,9 @@
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.ApplicationServices;
-using Autodesk.AutoCAD.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Linq; // Для Enumerable.Range и других LINQ методов
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -34,9 +32,6 @@ namespace PoseEdit2026
 
             // 3. Подписываемся на события для автоматического обновления полей
             SetupEventHandlers();
-
-            //// 3.1. Инициализируем группу Tik из настроек
-            //InitTikGroup();
 
             // 4. Только потом разрешаем событиям работать
             _isLoading = false;
@@ -199,24 +194,6 @@ namespace PoseEdit2026
             txtDiameter.TextChanged += (s, e) => UpdatePoseImage();
             txtSpace.TextChanged += (s, e) => UpdatePoseImage();
             txtLength.TextChanged += (s, e) => UpdatePoseImage();
-
-            //// Сохраняем настройки Tik при изменении
-            //if (txtTik != null)
-            //{
-            //    txtTik.TextChanged += (s, e) =>
-            //    {
-            //        if (int.TryParse(txtTik.Text.Trim(), out int v))
-            //            AppSettings.TikValue = v;
-            //    };
-            //}
-            //if (rbTik0 != null)
-            //{
-            //    rbTik0.Checked += (s, e) => AppSettings.TikMode = 0;
-            //}
-            //if (rbTik1 != null)
-            //{
-            //    rbTik1.Checked += (s, e) => AppSettings.TikMode = 1;
-            //}
         }
 
         // ====================================================================================
@@ -408,23 +385,6 @@ namespace PoseEdit2026
                 MessageBox.Show("Error in LoadDataFromBlock: " + ex.Message);
             }
         }
-
-        //private void InitTikGroup()
-        //{
-        //    if (txtTik != null)
-        //        txtTik.Text = AppSettings.TikValue.ToString();
-        //    if (rbTik0 != null && rbTik1 != null)
-        //    {
-        //        if (AppSettings.TikMode == 0)
-        //        {
-        //            rbTik0.IsChecked = true;
-        //        }
-        //        else
-        //        {
-        //            rbTik1.IsChecked = true;
-        //        }
-        //    }
-        //}
 
         private void SetValueOrTag(TextBox box, string val)
         {
@@ -782,135 +742,17 @@ namespace PoseEdit2026
                         else if (ent is Dimension d)
                         {
                             prop = "Measurement";
-                            try { val = d.Measurement; } catch { }
+                            try { val = (double)ent.GetType().GetProperty("Measurement").GetValue(ent); } catch { }
                         }
                         tr.Commit();
                     }
 
-                    // Применяем коэффициент пересчета из единиц чертежа в миллиметры
-                    // Например, если чертеж в метрах, умножаем на 1000
-                    double unitMultiplier = 1000.0 / AppSettings.DrawingUnit;
-                    val *= unitMultiplier;
-
-                    // Формируем код поля с учетом коэффициента пересчета (%ca)
-                    // %lu2 - десятичные, %pr0 - 0 знаков после запятой, %ca - множитель
-                    string fieldCode = string.Format("%<\\AcObjProp Object(%<\\_ObjId {0}>%).{1} \\f \"%lu2%pr0%ca{2}\">%", 
-                        objId.OldIdPtr, prop, unitMultiplier.ToString(CultureInfo.InvariantCulture));
+                    string fieldCode = string.Format("%<\\AcObjProp Object(%<\\_ObjId {0}>%).{1} \\f \"%lu2%pr0\">%", objId.OldIdPtr, prop);
 
                     targetBox.Text = val.ToString("0");
                     targetBox.Tag = fieldCode;
                     targetBox.Background = Brushes.LightYellow;
-                    targetBox.Tag = fieldCode;
-                    targetBox.Background = Brushes.LightYellow;
                 }
-            }
-            finally
-            {
-                this.ShowDialog();
-            }
-        }
-
-        /// <summary>
-        /// Специальная привязка для Item: выбираем направление (линия/поли-линия/размер/дуга),
-        /// считаем длину и делим на шаг из txtSpace, результат (кол-во стержней) пишем в txtItem.
-        /// </summary>
-        private void LinkItemWithSpacingToCount()
-        {
-            // Парсим шаг арматуры
-            double space = ParseDouble(txtSpace.Text);
-            if (space <= 0)
-            {
-                MessageBox.Show("Укажите корректный шаг арматуры (txtSpace).");
-                return;
-            }
-
-            this.Hide();
-            try
-            {
-                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
-                PromptEntityOptions opt = new PromptEntityOptions("\nSelect Line / Polyline / Arc / Dimension:");
-                opt.SetRejectMessage("\nInvalid object. Select Line / Polyline / Arc / Dimension.");
-                opt.AddAllowedClass(typeof(Line), true);
-                opt.AddAllowedClass(typeof(Polyline), true);
-                opt.AddAllowedClass(typeof(Polyline2d), true);
-                opt.AddAllowedClass(typeof(Polyline3d), true);
-                opt.AddAllowedClass(typeof(Arc), true);
-                opt.AddAllowedClass(typeof(Circle), true);
-                // Все виды размеров (Linear, Aligned, Rotated, ArcLength и т.п.)
-                opt.AddAllowedClass(typeof(Dimension), true);
-                opt.AddAllowedClass(typeof(RotatedDimension), true);
-                opt.AddAllowedClass(typeof(AlignedDimension), true);
-                opt.AddAllowedClass(typeof(ArcDimension), true);
-                opt.AddAllowedClass(typeof(OrdinateDimension), true);
-                opt.AddAllowedClass(typeof(RadialDimension), true);
-                opt.AddAllowedClass(typeof(RadialDimensionLarge), true);
-                opt.AddAllowedClass(typeof(DiametricDimension), true);
-
-                PromptEntityResult res = ed.GetEntity(opt);
-                if (res.Status != PromptStatus.OK) return;
-
-                double len = 0;
-                using (Transaction tr = res.ObjectId.Database.TransactionManager.StartTransaction())
-                {
-                    Entity ent = tr.GetObject(res.ObjectId, OpenMode.ForRead) as Entity;
-                    switch (ent)
-                    {
-                        case Line l:
-                            len = l.Length;
-                            break;
-                        case Polyline p:
-                            len = p.Length;
-                            break;
-                        case Arc a:
-                            len = a.Length;
-                            break;
-                        case Dimension d:
-                            try
-                            {
-                                // Для Linear/Aligned/ArcLength/Rotated/Ordinate и др.
-                                len = d.Measurement;
-                            }
-                            catch
-                            {
-                                // Резервный вариант через рефлексию, если Measurement недоступен
-                                try
-                                {
-                                    var prop = ent.GetType().GetProperty("Measurement");
-                                    if (prop != null)
-                                    {
-                                        len = Convert.ToDouble(prop.GetValue(ent));
-                                    }
-                                }
-                                catch
-                                {
-                                    // Финальный резерв: попробовать Length если это Curve-подобное
-                                    if (ent is Curve cv)
-                                        len = cv.GetDistanceAtParameter(cv.EndParam);
-                                }
-                            }
-                            break;
-                    }
-                    tr.Commit();
-                }
-
-                if (len <= 0)
-                {
-                    MessageBox.Show("Длина выбранного объекта не определена или равна нулю.");
-                    return;
-                }
-
-                // Количество стержней: округление к ближайшему (0.5 вверх), минимум 1
-                // Учитываем коэффициент пересчета единиц в миллиметры
-                double unitMultiplier = 1000.0 / AppSettings.DrawingUnit;
-                double raw = (len * unitMultiplier) / space;
-                int count = Math.Max(1, (int)Math.Round(raw, MidpointRounding.AwayFromZero));
-                txtItem.Tag = null;
-                txtItem.Background = Brushes.White;
-                txtItem.Text = count.ToString();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Ошибка при расчёте количества: " + ex.Message);
             }
             finally
             {
@@ -925,7 +767,7 @@ namespace PoseEdit2026
         private void btnLinkE_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtE);
         private void btnLinkF_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtF);
         private void btnLinkR_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtR);
-        private void btnLinkItem_Click(object sender, RoutedEventArgs e) => LinkItemWithSpacingToCount();
+        private void btnLinkItem_Click(object sender, RoutedEventArgs e) => LinkDimensionToTextBox(txtItem);
 
         private void txtDimension_GotFocus(object sender, RoutedEventArgs e)
         {
@@ -950,7 +792,7 @@ namespace PoseEdit2026
                 PromptEntityResult res = ed.GetEntity(opt);
                 if (res.Status == PromptStatus.OK)
                 {
-                    var result = RebarRecognizer1.Recognize(res.ObjectId);
+                    var result = RebarRecognizer.Recognize(res.ObjectId);
                     txtType.Text = result.Type;
                     txtLength.Text = result.Length;
                     txtA.Text = result.A;
@@ -958,6 +800,7 @@ namespace PoseEdit2026
                     txtC.Text = result.C;
                     txtD.Text = result.D;
                     txtE.Text = result.E;
+                    txtF.Text = result.F;
                     txtR.Text = result.R;
                 }
             }
@@ -971,139 +814,8 @@ namespace PoseEdit2026
             }
         }
 
-        private void btnUpdateAll_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // 1. Формируем данные из формы (так же, как в Update)
-                string tbResult = "";
-                if (!string.IsNullOrEmpty(txtItemMult.Text))
-                    tbResult += txtItemMult.Text + "x";
-                tbResult += txtItem.Text + "Ø" + txtDiameter.Text;
-                if (!string.IsNullOrWhiteSpace(txtSpace.Text))
-                    tbResult += "/" + txtSpace.Text.Trim();
-                if (!string.IsNullOrWhiteSpace(txtLength.Text))
-                {
-                    string lengthValue = txtLength.Text.Trim();
-                    tbResult += lengthValue.StartsWith("L=", StringComparison.OrdinalIgnoreCase)
-                        ? " " + lengthValue
-                        : " L=" + lengthValue;
-                }
-                if (!string.IsNullOrWhiteSpace(txtNote.Text))
-                    tbResult += " " + txtNote.Text.Trim();
-
-                var newValues = new Dictionary<string, string>
-                {
-                    ["POZ"] = txtPose.Text,
-                    ["TB"] = tbResult,
-                    ["TIP"] = txtType.Text,
-                    ["A"] = GetValueOrTag(txtA),
-                    ["B"] = GetValueOrTag(txtB),
-                    ["C"] = GetValueOrTag(txtC),
-                    ["D"] = GetValueOrTag(txtD),
-                    ["E"] = GetValueOrTag(txtE),
-                    ["F"] = GetValueOrTag(txtF),
-                    ["R"] = GetValueOrTag(txtR)
-                };
-
-                if (!string.IsNullOrWhiteSpace(txtSpace.Text))
-                    newValues["ARALIK"] = txtSpace.Text.Trim();
-                if (!string.IsNullOrWhiteSpace(txtNote.Text))
-                    newValues["NOTE"] = txtNote.Text.Trim();
-
-                // 2. Выбираем несколько блоков RL-POS
-                this.Hide();
-                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
-                TypedValue[] filterValues = new TypedValue[]
-                {
-                    new TypedValue((int)DxfCode.Start, "INSERT"),
-                    new TypedValue((int)DxfCode.BlockName, "RL-POS*")
-                };
-                SelectionFilter filter = new SelectionFilter(filterValues);
-                PromptSelectionOptions selOpts = new PromptSelectionOptions();
-                selOpts.MessageForAdding = "\nSelect RL-POS blocks to update:";
-
-                PromptSelectionResult selRes = ed.GetSelection(selOpts, filter);
-                if (selRes.Status != PromptStatus.OK || selRes.Value.Count == 0)
-                {
-                    MessageBox.Show("Блоки RL-POS не выбраны.");
-                    return;
-                }
-
-                int updated = 0;
-                double currentScale = AppSettings.SheetScale; // Получаем текущий масштаб из настроек
-
-                foreach (ObjectId id in selRes.Value.GetObjectIds())
-                {
-                    // 1. Обновляем атрибуты
-                    BlockHelper.SetAttributes(id, newValues);
-
-                    // 2. Обновляем масштаб блока
-                    using (Transaction tr = id.Database.TransactionManager.StartTransaction())
-                    {
-                        BlockReference br = tr.GetObject(id, OpenMode.ForWrite) as BlockReference;
-                        if (br != null)
-                        {
-                            br.ScaleFactors = new Scale3d(currentScale, currentScale, currentScale);
-                        }
-                        tr.Commit();
-                    }
-                    updated++;
-                }
-
-                MessageBox.Show($"Обновлено блоков: {updated}");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error in Update All: " + ex.Message);
-            }
-            finally
-            {
-                this.ShowDialog();
-            }
-        }
-        private void btnRead_Click(object sender, RoutedEventArgs e)
-        {
-            this.Hide();
-            try
-            {
-                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
-                PromptEntityOptions opt = new PromptEntityOptions("\nSelect RL-POS block:");
-                opt.SetRejectMessage("\nInvalid object. Select block with attributes.");
-                opt.AddAllowedClass(typeof(BlockReference), true);
-
-                PromptEntityResult res = ed.GetEntity(opt);
-                if (res.Status != PromptStatus.OK) return;
-
-                // Проверяем, что это блок с атрибутами (желательно RL-POS)
-                using (Transaction tr = res.ObjectId.Database.TransactionManager.StartTransaction())
-                {
-                    if (tr.GetObject(res.ObjectId, OpenMode.ForRead) is BlockReference br)
-                    {
-                        // По возможности фильтруем по имени блока
-                        string name = br.Name?.ToUpperInvariant() ?? "";
-                        if (!name.Contains("RL-POS") && br.AttributeCollection.Count == 0)
-                        {
-                            MessageBox.Show("Выберите блок RL-POS с атрибутами.");
-                            return;
-                        }
-                    }
-                    tr.Commit();
-                }
-
-                _currentBlockId = res.ObjectId;
-                LoadDataFromBlock();
-                UpdateShapeImage();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error reading block: " + ex.Message);
-            }
-            finally
-            {
-                this.ShowDialog();
-            }
-        }
+        private void btnUpdateAll_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
+        private void btnRead_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
 
         // ====================================================================================
         // ОБРАБОТЧИК: btnSettings_Click

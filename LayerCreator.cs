@@ -171,29 +171,7 @@ namespace PoseEdit2026
             
             if (settings.LayerDefinitions != null && settings.LayerDefinitions.Count > 0)
             {
-                // Новый формат: используем LayerDefinitions
                 layersToCreate = settings.LayerDefinitions;
-            }
-            else if (settings.LayerNames != null && settings.LayerNames.Count > 0)
-            {
-                // Старый формат: конвертируем LayerNames в LayerDefinitions
-                foreach (string layerName in settings.LayerNames)
-                {
-                    if (!string.IsNullOrWhiteSpace(layerName))
-                    {
-                        layersToCreate.Add(new LayerDefinition
-                        {
-                            Name = layerName.Trim(),
-                            ColorIndex = settings.UseColor && settings.LayerColor != null 
-                                ? (short)settings.LayerColor.ColorIndex 
-                                : (short)7,
-                            Linetype = settings.UseLinetype ? settings.LinetypeName : "Continuous",
-                            LineWeightMM = settings.UseLineWeight && settings.LineWeight.HasValue
-                                ? ConvertLineWeightToMM(settings.LineWeight.Value)
-                                : null
-                        });
-                    }
-                }
             }
 
             if (layersToCreate.Count == 0) return result;
@@ -417,57 +395,6 @@ namespace PoseEdit2026
             }
         }
 
-        // ====================================================================================
-        // МЕТОД: UpdateLayerProperties (устаревший, для обратной совместимости)
-        // ====================================================================================
-        // НАЗНАЧЕНИЕ: Обновляет свойства слоя (цвет, тип линии, вес линии)
-        //
-        // ПАРАМЕТРЫ:
-        //   layer - слой для обновления (LayerTableRecord)
-        //   settings - настройки (LayerSettings)
-        // ====================================================================================
-        [Obsolete("Use UpdateLayerPropertiesFromDefinition instead")]
-        private static void UpdateLayerProperties(LayerTableRecord layer, LayerSettings settings)
-        {
-            if (layer == null || settings == null) return;
-
-            // Устанавливаем цвет
-            if (settings.UseColor && settings.LayerColor != null)
-            {
-                layer.Color = settings.LayerColor;
-            }
-            else if (!settings.UseColor)
-            {
-                // Используем цвет по умолчанию (7 - белый/черный)
-                layer.Color = Color.FromColorIndex(ColorMethod.ByAci, 7);
-            }
-
-            // Устанавливаем тип линии (если указан)
-            if (settings.UseLinetype && !string.IsNullOrWhiteSpace(settings.LinetypeName))
-            {
-                // Получаем ID типа линии из базы данных
-                ObjectId linetypeId = GetLinetypeId(layer.Database, settings.LinetypeName);
-                if (!linetypeId.IsNull)
-                {
-                    layer.LinetypeObjectId = linetypeId;
-                }
-            }
-
-            // Устанавливаем вес линии (если указан)
-            if (settings.UseLineWeight && settings.LineWeight.HasValue)
-            {
-                layer.LineWeight = settings.LineWeight.Value;
-            }
-
-            // Устанавливаем видимость
-            layer.IsOff = settings.IsOff;
-
-            // Устанавливаем замораживание
-            layer.IsFrozen = settings.IsFrozen;
-
-            // Устанавливаем блокировку
-            layer.IsLocked = settings.IsLocked;
-        }
 
         // ====================================================================================
         // МЕТОД: GetLineWeightFromMM
@@ -508,50 +435,6 @@ namespace PoseEdit2026
             if (mm <= 2.00) return Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight158;
             if (mm <= 2.11) return Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight200;
             return Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight211;
-        }
-
-        // ====================================================================================
-        // МЕТОД: ConvertLineWeightToMM
-        // ====================================================================================
-        // НАЗНАЧЕНИЕ: Преобразует LineWeight в миллиметры (приблизительно)
-        //
-        // ПАРАМЕТРЫ:
-        //   lw - вес линии (LineWeight)
-        //
-        // ВОЗВРАЩАЕТ:
-        //   double? - значение в миллиметрах или null
-        // ====================================================================================
-        private static double? ConvertLineWeightToMM(LineWeight lw)
-        {
-            // Приблизительное преобразование (обратное к GetLineWeightFromMM)
-            switch (lw)
-            {
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight000: return 0.05;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight005: return 0.09;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight009: return 0.13;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight013: return 0.15;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight015: return 0.18;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight018: return 0.20;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight020: return 0.25;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight025: return 0.30;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight030: return 0.35;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight035: return 0.40;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight040: return 0.50;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight050: return 0.53;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight053: return 0.60;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight060: return 0.70;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight070: return 0.80;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight080: return 0.90;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight090: return 1.00;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight100: return 1.06;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight106: return 1.20;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight120: return 1.40;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight140: return 1.58;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight158: return 2.00;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight200: return 2.11;
-                case Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight211: return 2.11;
-                default: return null;
-            }
         }
 
         // ====================================================================================
@@ -761,37 +644,6 @@ namespace PoseEdit2026
 
         // Пропускать существующие слои (не обновлять их)
         public bool SkipExisting { get; set; } = true;
-
-        // Устаревшие свойства (для обратной совместимости)
-        [Obsolete("Use LayerDefinitions instead")]
-        public List<string> LayerNames { get; set; } = new List<string>();
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public bool UseColor { get; set; } = true;
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public Color LayerColor { get; set; } = Color.FromColorIndex(ColorMethod.ByAci, 7);
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public bool UseLinetype { get; set; } = false;
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public string LinetypeName { get; set; } = "Continuous";
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public bool UseLineWeight { get; set; } = false;
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public LineWeight? LineWeight { get; set; } = Autodesk.AutoCAD.DatabaseServices.LineWeight.ByLayer;
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public bool IsOff { get; set; } = false;
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public bool IsFrozen { get; set; } = false;
-
-        [Obsolete("Use LayerDefinitions instead")]
-        public bool IsLocked { get; set; } = false;
     }
 }
 

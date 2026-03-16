@@ -298,13 +298,11 @@
                     - HorizontalAlignment и VerticalAlignment="Center" - центрирование изображения
                     -->
                         <Image x:Name="imgPreview" 
-                           MinHeight="245" 
-                           MinWidth="245" 
-                           SnapsToDevicePixels="True" 
-                           Margin="0,0,0,-15" 
                            Stretch="Uniform"
                            HorizontalAlignment="Center" 
                            VerticalAlignment="Center"
+                           MinWidth="350"
+                           MinHeight="350"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            RenderOptions.CachingHint="Cache"/>
                             </GroupBox>
