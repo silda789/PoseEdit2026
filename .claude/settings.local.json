@@ -3,7 +3,8 @@
     "allow": [
       "Bash(claude *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\durum\\\\Documents\\\\GitHub\\\\PoseEdit2026\" -Force)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(git push *)"
     ]
   }
 }
