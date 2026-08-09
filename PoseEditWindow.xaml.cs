@@ -814,8 +814,120 @@ namespace PoseEdit2026
             }
         }
 
-        private void btnUpdateAll_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
-        private void btnRead_Click(object sender, RoutedEventArgs e) { MessageBox.Show("Not implemented yet"); }
+        // Обновляет все блоки RL-POS в чертеже с тем же номером позиции (POZ).
+        // Применяет текущие значения формы (TIP, A-F, R, TB) ко всем совпадающим блокам.
+        private void btnUpdateAll_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string targetPoz = txtPose.Text.Trim();
+                if (string.IsNullOrEmpty(targetPoz))
+                {
+                    MessageBox.Show("POZ is empty. Fill in the position number first.", "UpdateAll", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Собираем атрибуты из формы (аналогично btnUpdate)
+                string tbResult = "";
+                if (!string.IsNullOrEmpty(txtItemMult.Text)) tbResult += txtItemMult.Text + "x";
+                tbResult += txtItem.Text + "Ø" + txtDiameter.Text;
+                if (!string.IsNullOrWhiteSpace(txtSpace.Text)) tbResult += "/" + txtSpace.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(txtLength.Text))
+                {
+                    string lv = txtLength.Text.Trim();
+                    tbResult += lv.StartsWith("L=") ? " " + lv : " L=" + lv;
+                }
+                if (!string.IsNullOrWhiteSpace(txtNote.Text)) tbResult += " " + txtNote.Text.Trim();
+
+                var newValues = new Dictionary<string, string>
+                {
+                    ["POZ"]  = targetPoz,
+                    ["TB"]   = tbResult,
+                    ["TIP"]  = txtType.Text,
+                    ["A"]    = GetValueOrTag(txtA),
+                    ["B"]    = GetValueOrTag(txtB),
+                    ["C"]    = GetValueOrTag(txtC),
+                    ["D"]    = GetValueOrTag(txtD),
+                    ["E"]    = GetValueOrTag(txtE),
+                    ["F"]    = GetValueOrTag(txtF),
+                    ["R"]    = GetValueOrTag(txtR)
+                };
+                if (!string.IsNullOrWhiteSpace(txtSpace.Text)) newValues["ARALIK"] = txtSpace.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(txtNote.Text))  newValues["NOTE"]   = txtNote.Text.Trim();
+
+                // Ищем все блоки RL-POS и RL-POS2 в чертеже
+                Document doc = App.DocumentManager.MdiActiveDocument;
+                Database db  = doc.Database;
+                int updated  = 0;
+
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    BlockTableRecord ms = tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead) as BlockTableRecord;
+
+                    foreach (ObjectId id in ms)
+                    {
+                        DBObject obj = tr.GetObject(id, OpenMode.ForRead);
+                        if (obj is not BlockReference blk) continue;
+
+                        string bname = blk.Name;
+                        if (bname != "RL-POS" && bname != "RL-POS2") continue;
+
+                        // Проверяем POZ у этого блока
+                        var attrs = BlockHelper.GetAttributes(id);
+                        if (!attrs.ContainsKey("POZ") || attrs["POZ"] != targetPoz) continue;
+
+                        BlockHelper.SetAttributes(id, newValues);
+                        updated++;
+                    }
+                    tr.Commit();
+                }
+
+                MessageBox.Show($"Updated {updated} block(s) with POZ = {targetPoz}.", "UpdateAll", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error in UpdateAll: " + ex.Message);
+            }
+        }
+
+        // Позволяет выбрать другой блок RL-POS/RL-POS2 в чертеже и загрузить его данные в форму.
+        private void btnRead_Click(object sender, RoutedEventArgs e)
+        {
+            this.Hide();
+            try
+            {
+                Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
+
+                var filterList = new Autodesk.AutoCAD.DatabaseServices.TypedValue[]
+                {
+                    new Autodesk.AutoCAD.DatabaseServices.TypedValue((int)DxfCode.Start, "INSERT"),
+                    new Autodesk.AutoCAD.DatabaseServices.TypedValue((int)DxfCode.BlockName, "RL-POS,RL-POS2")
+                };
+                var filter = new SelectionFilter(filterList);
+
+                PromptSelectionOptions selOpts = new PromptSelectionOptions();
+                selOpts.MessageForAdding = "\nSelect RL-POS block to read:";
+                selOpts.SingleOnly = true;
+                PromptSelectionResult res = ed.GetSelection(selOpts, filter);
+
+                if (res.Status == PromptStatus.OK)
+                {
+                    _currentBlockId = res.Value[0].ObjectId;
+                    _isLoading = true;
+                    LoadDataFromBlock();
+                    _isLoading = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error in Read: " + ex.Message);
+            }
+            finally
+            {
+                this.ShowDialog();
+            }
+        }
 
         // ====================================================================================
         // ОБРАБОТЧИК: btnSettings_Click

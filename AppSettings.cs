@@ -28,6 +28,8 @@
 #nullable disable
 
 using System;
+using System.IO;
+using System.Text.Json;
 
 namespace PoseEdit2026
 {
@@ -181,33 +183,63 @@ namespace PoseEdit2026
         /// // Вызов при старте программы
         /// AppSettings.LoadFromFiles();
         /// </example>
-        public static void LoadFromFiles()
+        // Путь к файлу настроек: рядом с DLL
+        private static string SettingsFilePath
         {
-            // TODO: Реализовать загрузку настроек из файла
-            // Эта функция может быть вызвана при старте, если нужно загрузить сохраненные настройки
-            // Пока оставляем значения по умолчанию (установленные выше в приватных полях)
+            get
+            {
+                string dir = Path.GetDirectoryName(
+                    System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+                return Path.Combine(dir, "PoseEdit2026.settings.json");
+            }
         }
 
-        /// <summary>
-        /// Сохраняет настройки в файлы (для совместимости со старым кодом)
-        /// </summary>
-        /// <remarks>
-        /// ВАЖНО: Метод пока не реализован. Настройки хранятся только в памяти.
-        /// В будущем здесь может быть:
-        ///   - Запись в XML файл
-        ///   - Запись в JSON файл
-        ///   - Запись в базу данных
-        ///   - Запись в реестр Windows
-        /// </remarks>
-        /// <example>
-        /// // Вызов при закрытии программы
-        /// AppSettings.SaveToFiles();
-        /// </example>
+        // DTO для сериализации
+        private class SettingsDto
+        {
+            public double DrawingUnit    { get; set; } = 1000.0;
+            public double SheetScale     { get; set; } = 50.0;
+            public string TableLanguage  { get; set; } = "rus";
+            public string[] TablePlacement { get; set; } = ["0", "0", "1"];
+            public string ProjectName    { get; set; } = "";
+        }
+
+        /// <summary>Загружает настройки из файла JSON рядом с DLL.</summary>
+        public static void LoadFromFiles()
+        {
+            try
+            {
+                string path = SettingsFilePath;
+                if (!File.Exists(path)) return;
+                string json = File.ReadAllText(path);
+                var dto = JsonSerializer.Deserialize<SettingsDto>(json);
+                if (dto == null) return;
+                _drawingUnit    = dto.DrawingUnit;
+                _sheetScale     = dto.SheetScale;
+                _tableLanguage  = dto.TableLanguage ?? "rus";
+                _tablePlacement = dto.TablePlacement ?? ["0", "0", "1"];
+                _projectName    = dto.ProjectName ?? "";
+            }
+            catch { }
+        }
+
+        /// <summary>Сохраняет настройки в файл JSON рядом с DLL.</summary>
         public static void SaveToFiles()
         {
-            // TODO: Реализовать сохранение настроек в файл
-            // Эта функция может быть вызвана при закрытии, если нужно сохранить настройки
-            // Пока не реализовано, так как настройки хранятся в памяти
+            try
+            {
+                var dto = new SettingsDto
+                {
+                    DrawingUnit    = _drawingUnit,
+                    SheetScale     = _sheetScale,
+                    TableLanguage  = _tableLanguage,
+                    TablePlacement = _tablePlacement,
+                    ProjectName    = _projectName
+                };
+                string json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(SettingsFilePath, json);
+            }
+            catch { }
         }
     }
 }

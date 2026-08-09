@@ -33,14 +33,24 @@ namespace PoseEdit2026
         // Имя слоя, на который мы будем автоматически помещать наши блоки.
         private const string TargetLayer = "ren.mtr.tb";
 
+        // Загружаем настройки один раз при первом запуске любой команды.
+        private static bool _settingsLoaded = false;
+        private static void EnsureSettingsLoaded()
+        {
+            if (_settingsLoaded) return;
+            _settingsLoaded = true;
+            AppSettings.LoadFromFiles();
+        }
+
         // ---------------------------------------------------------------------------------------
         // ГЛАВНАЯ КОМАНДА "EEN"
         // ---------------------------------------------------------------------------------------
-        // [CommandMethod] регистрирует команду в AutoCAD. 
+        // [CommandMethod] регистрирует команду в AutoCAD.
         // Когда пользователь введет "EEN", вызовется этот метод.
         [CommandMethod("EEN")]
         public void EditPoseCommand()
         {
+            EnsureSettingsLoaded();
             // Получаем доступ к текущему открытому чертежу (Document)
             Document doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return; // Если нет открытых документов - выходим

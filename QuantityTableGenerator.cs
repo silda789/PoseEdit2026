@@ -784,26 +784,434 @@ namespace PoseEdit2026
         }
 
         // ====================================================================================
-        // РИСОВАНИЕ ТАБЛИЦ
+        // РИСОВАНИЕ ТАБЛИЦ — вспомогательные функции
+        // ====================================================================================
+
+        // Вес арматуры кг/м. Аналог LISP: (defun cp_ag (cp) (* 0.00616537558266997 cp cp))
+        private static double CpAg(double diameterMm)
+            => 0.00616537558266997 * diameterMm * diameterMm;
+
+        // Сдвиг точки в направлении angle (радианы) на расстояние dist.
+        // Аналог LISP: (polar pt angle dist)
+        private static Point3d Polar(Point3d pt, double angle, double dist)
+            => new Point3d(pt.X + dist * Math.Cos(angle), pt.Y + dist * Math.Sin(angle), pt.Z);
+
+        // Рисует линию от pt1 в направлении angle на длину dist.
+        // lineType: 1 → "ren.mtr.layer_l1", иначе → "Defpoints".
+        // Аналог LISP: REN_cizgi
+        private static void RenLine(BlockTableRecord space, Transaction tr,
+            Point3d pt1, double angle, double dist, int lineType)
+        {
+            Line line = new Line(pt1, Polar(pt1, angle, dist));
+            line.Layer = lineType == 1 ? "ren.mtr.layer_l1" : "Defpoints";
+            space.AppendEntity(line);
+            tr.AddNewlyCreatedDBObject(line, true);
+        }
+
+        // Возвращает ObjectId текстового стиля: "ren Gost.common" или стиль по умолчанию.
+        private static ObjectId GetTextStyleId(Database db, Transaction tr)
+        {
+            TextStyleTable tst = tr.GetObject(db.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
+            if (tst != null && tst.Has("ren Gost.common")) return tst["ren Gost.common"];
+            return db.Textstyle;
+        }
+
+        // Рисует однострочный текст DBText.
+        // Точка: basePt → смещение (angle1, dist1) → смещение (angle2, dist2).
+        // d72: 0=Left, 1=Center, 2=Right; d73: 0=Baseline, 1=Bottom, 2=Middle, 3=Top.
+        // Аналог LISP: REN_Y (widthFactor=0.8) и REN_Y2 (widthFactor задаётся явно)
+        private static void RenText(BlockTableRecord space, Transaction tr, Database db,
+            Point3d basePt, string text, double height,
+            double angle1, double dist1, double angle2, double dist2,
+            int d72, int d73, double widthFactor = 0.8)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            Point3d pt = Polar(Polar(basePt, angle1, dist1), angle2, dist2);
+
+            DBText txt = new DBText();
+            txt.TextString = text;
+            txt.Height = height;
+            txt.WidthFactor = widthFactor;
+            txt.Layer = "ren.mtr.layer_t1";
+            txt.TextStyleId = GetTextStyleId(db, tr);
+
+            if (d72 == 0 && d73 == 0)
+            {
+                txt.Position = pt;
+            }
+            else
+            {
+                txt.HorizontalMode = (TextHorizontalMode)d72;
+                txt.VerticalMode   = (TextVerticalMode)d73;
+                txt.AlignmentPoint = pt;
+                txt.Position       = pt;
+            }
+
+            space.AppendEntity(txt);
+            tr.AddNewlyCreatedDBObject(txt, true);
+        }
+
+        // Пытается вставить блок PZ_XX.dwg из папки Standard (эскиз формы).
+        // Если файл не найден — тихо пропускает.
+        // Аналог LISP: (command ".-insert" dwgname ...)
+        private static void TryInsertPzBlock(BlockTableRecord space, Transaction tr, Database db,
+            string tip, Point3d insertPt, double scaleX, double scaleY,
+            Dictionary<string, string> dims)
+        {
+            try
+            {
+                string standardPath = GetStandardPath();
+                string dwgFile = Path.Combine(standardPath, $"PZ_{tip}.dwg");
+                if (!File.Exists(dwgFile)) dwgFile = Path.Combine(standardPath, "PZ_99.dwg");
+                if (!File.Exists(dwgFile)) return;
+
+                string blockName = $"PZ_{tip}";
+                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForWrite) as BlockTable;
+                ObjectId btrId;
+
+                if (bt.Has(blockName))
+                {
+                    btrId = bt[blockName];
+                }
+                else
+                {
+                    using (Database srcDb = new Database(false, true))
+                    {
+                        srcDb.ReadDwgFile(dwgFile, FileOpenMode.OpenForReadAndAllShare, true, "");
+                        btrId = db.Insert(blockName, srcDb, true);
+                    }
+                }
+
+                BlockReference blkRef = new BlockReference(insertPt, btrId);
+                blkRef.ScaleFactors = new Scale3d(scaleX, scaleY, 1.0);
+                space.AppendEntity(blkRef);
+                tr.AddNewlyCreatedDBObject(blkRef, true);
+
+                BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
+                if (btr != null && btr.HasAttributeDefinitions)
+                {
+                    foreach (ObjectId id in btr)
+                    {
+                        DBObject obj = tr.GetObject(id, OpenMode.ForRead);
+                        if (obj is AttributeDefinition attDef)
+                        {
+                            AttributeReference attRef = new AttributeReference();
+                            attRef.SetAttributeFromBlock(attDef, blkRef.BlockTransform);
+                            string key = attDef.Tag.ToUpper();
+                            if (dims.ContainsKey(key)) attRef.TextString = dims[key];
+                            blkRef.AttributeCollection.AppendAttribute(attRef);
+                            tr.AddNewlyCreatedDBObject(attRef, true);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // Общая логика рисования трёх таблиц.
+        // lang: "rus" — только русский, "eng" — только английский, "re" — двуязычный.
+        private static void DrawTablesCore(Point3d yerlesim, List<DiameterInfo> capListe,
+            List<RebarPositionInfo> toplamBilgi, double olcek, string lang)
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Database db = doc.Database;
+            double olcuCarp = 1.0 / GetUnits();
+
+            int pozAdet = toplamBilgi.Count;
+            int capAdet = capListe.Count;
+            int tipBilgiAdet = toplamBilgi.Count(x => x.Tip == "00"); // прямые стержни
+            int pozTipAdet   = toplamBilgi.Count(x => x.Tip != "00"); // с формой
+
+            const double sag   = 0.0;
+            const double asagi = Math.PI * 1.5;
+
+            // Ширины колонок (Sut) и высоты строк (Sat), умноженные на masshtab olcek
+            double sut1_01 = olcek * 1.70;
+            double sut1_02 = olcek * 6.00;
+            double sut1_2  = olcek * 0.80;
+            // Для RE-версии: заголовочная строка таблицы 1 выше — двойная высота
+            double sat1_01 = lang == "re" ? olcek * 1.50 : olcek * 0.80;
+            double sat1_02 = olcek * 1.50;
+
+            double sut2_01 = olcek * 1.50;
+            double sut2_02 = olcek * 6.00;
+            double sut2_03 = olcek * 6.00;
+            double sut2_04 = olcek * 1.50;
+            double sut2_05 = olcek * 1.50;
+            double sut2_06 = olcek * 2.00;
+            double sut2_3  = olcek * 0.80;
+            double sat2_01 = olcek * 0.80;
+            double sat2_02 = olcek * 1.50;
+            double sat2_03 = olcek * 0.80;
+
+            double sut3_01 = olcek * 4.00;
+            double sut3_02 = olcek * 1.50;
+            double sut3_03 = olcek * 2.00;
+            double sat3_01 = olcek * 0.80;
+
+            double yzy1 = olcek * 0.30;
+            double yzy2 = olcek * 0.30;
+
+            int duseyadet = (pozAdet == tipBilgiAdet) ? 6 : 5;
+            int yatayadet = (pozAdet == tipBilgiAdet) ? 7 : 6;
+
+            // Опорные точки зависят от схемы размещения
+            string[] placement = GetTablePlacementSettings();
+            string yer1 = placement.Length > 0 ? placement[0] : "0";
+            string yer2 = placement.Length > 1 ? placement[1] : "0";
+
+            Point3d p001, p003, p006;
+            if (yer1 == "1")
+            {
+                p001 = yerlesim;
+                p003 = Polar(p001, sag, sut1_01 + sut1_02 + sut1_2);
+                p006 = Polar(p001, sag, sut1_01 + sut1_02 + sut1_2 + sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05 + sut2_06 + sut2_3);
+            }
+            else if (yer2 == "1")
+            {
+                p003 = yerlesim;
+                p001 = Polar(p003, asagi, sat2_02 + sat1_01 / 2 + sat2_03 * (pozAdet + duseyadet + 1));
+                p006 = Polar(p001, sag, sut1_01 + sut1_02 + sat1_01 / 2);
+            }
+            else // Yerlesim_3 (default)
+            {
+                p001 = yerlesim;
+                p003 = Polar(p001, sag, sut1_01 + sut1_02 + sut1_2);
+                Point3d p0061 = Polar(p003, asagi, sat2_02 + sat1_01 / 2 + sat2_03 * (pozAdet + duseyadet + 1));
+                p006 = Polar(p0061, sag, (sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05 + sut2_06)
+                                       - (sut3_01 + (1 + capAdet) * sut3_02 + sut3_03));
+            }
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord space = tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite) as BlockTableRecord;
+
+                // Локальные функции-обёртки для краткости вызовов
+                void Line_(Point3d pt, double a, double d, int t) => RenLine(space, tr, pt, a, d, t);
+                void Text_(Point3d bp, string txt, double h, double a1, double d1, double a2, double d2, int h72, int v73, double wf = 0.8)
+                    => RenText(space, tr, db, bp, txt, h, a1, d1, a2, d2, h72, v73, wf);
+
+                // Вспомогатель: пишет 1 строку (rus/eng) или 2 строки (re)
+                void T2(Point3d bp, string rus, string eng, double h,
+                        double a1, double d1, double a2off1, double a2off2,
+                        int h72, int v73, double wf = 0.8)
+                {
+                    double a2 = asagi;
+                    if (lang == "re")
+                    {
+                        Text_(bp, rus, h, a1, d1, a2, a2off1, h72, v73, wf);
+                        Text_(bp, eng, h, a1, d1, a2, a2off2, h72, v73, wf);
+                    }
+                    else if (lang == "eng")
+                        Text_(bp, eng, h, a1, d1, a2, (a2off1 + a2off2) / 2, h72, v73, wf);
+                    else
+                        Text_(bp, rus, h, a1, d1, a2, (a2off1 + a2off2) / 2, h72, v73, wf);
+                }
+
+                // ============================================================
+                // ТАБЛИЦА 1: Ведомость деталей / Detail list
+                // ============================================================
+                Point3d p002 = Polar(p001, asagi, sat1_01);
+                int sutAdet = tipBilgiAdet == 0 ? 2 : 3;
+                int satAdet = tipBilgiAdet == 0 ? 1 : 2;
+
+                Line_(p001, sag,   sut1_01 + sut1_02, 2);
+                Line_(p001, asagi, sat1_01, 2);
+                Line_(Polar(p001, sag, sut1_01 + sut1_02), asagi, sat1_01, 2);
+                Line_(p002, sag,   sut1_01 + sut1_02, 1);
+                Line_(p002, asagi, sat1_02 * (pozTipAdet + satAdet), 1);
+                Line_(Polar(p002, sag, sut1_01), asagi, sat1_02 * (pozTipAdet + 1), 1);
+                Line_(Polar(p002, sag, sut1_01 + sut1_02), asagi, sat1_02 * (pozTipAdet + satAdet), 1);
+                for (int i = 1; i < pozTipAdet + sutAdet; i++)
+                    Line_(Polar(p002, asagi, i * sat1_02), sag, sut1_01 + sut1_02, 1);
+
+                T2(p001, "Ведомость деталей", "Detail list", yzy2,
+                   sag, 0.5 * (sut1_01 + sut1_02), 0.25 * sat1_01, 0.75 * sat1_01, 1, 2);
+                T2(p002, "Поз.", "Pos.", yzy2,
+                   sag, 0.5 * sut1_01, 0.25 * sat1_02, 0.75 * sat1_02, 1, 2);
+                T2(p002, "Эскиз", "Draft", yzy2,
+                   sag, sut1_01 + 0.5 * sut1_02, 0.25 * sat1_02, 0.75 * sat1_02, 1, 2);
+
+                int j = 0;
+                for (int i = 0; i < pozAdet; i++)
+                {
+                    if (toplamBilgi[i].Tip == "00") continue;
+                    T2(p002, toplamBilgi[i].Poz, toplamBilgi[i].Poz, yzy2,
+                       sag, 0.5 * sut1_01, (j + 1.25) * sat1_02, (j + 1.75) * sat1_02, 1, 2);
+
+                    Point3d pzPt = Polar(Polar(p002, sag, sut1_01 + 0.5 * sut1_02), asagi, (j + 1.5) * sat1_02);
+                    var dims = new Dictionary<string, string> {
+                        ["A"] = toplamBilgi[i].A, ["B"] = toplamBilgi[i].B,
+                        ["C"] = toplamBilgi[i].C, ["D"] = toplamBilgi[i].D,
+                        ["E"] = toplamBilgi[i].E, ["F"] = toplamBilgi[i].F,
+                        ["R"] = toplamBilgi[i].R
+                    };
+                    TryInsertPzBlock(space, tr, db, toplamBilgi[i].Tip, pzPt,
+                        sut1_02 / 450.0, sat1_02 / 100.0, dims);
+                    j++;
+                }
+
+                // ============================================================
+                // ТАБЛИЦА 2: Спецификация арматурных изделий
+                // ============================================================
+                Point3d p004 = Polar(p003, asagi, sat2_01);
+                Point3d p005 = Polar(p004, asagi, sat2_02);
+                Point3d p106 = Polar(p005, asagi, 2 * sat2_03);
+                Point3d p107 = Polar(p106, sag, sut2_01 + sut2_02);
+                Point3d p108 = Polar(p106, sag, sut2_01 + sut2_02 + 0.30 * sut2_03);
+                Point3d p109 = Polar(p106, sag, sut2_01 + sut2_02 + 0.60 * sut2_03);
+                double t2w = sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05 + sut2_06;
+
+                // Рамка и сетка таблицы 2
+                Line_(p003, sag,   t2w, 2);
+                Line_(p003, asagi, sat2_01, 2);
+                Line_(Polar(p003, sag, t2w), asagi, sat2_01, 2);
+                Line_(p004, sag, t2w, 1);
+                Line_(p005, sag, t2w, 1);
+                for (int i = 1; i < pozAdet + yatayadet; i++)
+                    Line_(Polar(p005, asagi, i * sat2_03), sag, t2w, 1);
+                Line_(p004,                                             asagi, sat2_02 + sat2_03 * (pozAdet + duseyadet), 1);
+                Line_(Polar(p004, sag, sut2_01),                       asagi, sat2_02 + sat2_03 * (pozAdet + 5), 1);
+                Line_(Polar(p004, sag, sut2_01 + sut2_02),             asagi, sat2_02 + sat2_03 * (pozAdet + 5), 1);
+                Line_(Polar(p004, sag, sut2_01 + sut2_02 + sut2_03),   asagi, sat2_02 + sat2_03 * (pozAdet + 5), 1);
+                Line_(p108,                                             asagi, sat2_03 * pozAdet, 1);
+                Line_(p109,                                             asagi, sat2_03 * pozAdet, 1);
+                Line_(Polar(p004, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04),           asagi, sat2_02 + sat2_03 * (pozAdet + 5), 1);
+                Line_(Polar(p004, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05), asagi, sat2_02 + sat2_03 * (pozAdet + 5), 1);
+                Line_(Polar(p004, sag, t2w),                           asagi, sat2_02 + sat2_03 * (pozAdet + duseyadet), 1);
+
+                // Заголовок и колонки таблицы 2
+                T2(p003, "Спецификация арматурных изделий", "Reinforcement details specification", yzy2,
+                   sag, 0.5 * t2w, 0.25 * sat2_01, 0.75 * sat2_01, 1, 2);
+                T2(p004, "Поз.",         "Pos.",         yzy2, sag, 0.5 * sut2_01, 0.25 * sat2_02, 0.75 * sat2_02, 1, 2);
+                T2(p004, "Обозначение",  "Designation",  yzy2, sag, sut2_01 + 0.5 * sut2_02, 0.25 * sat2_02, 0.75 * sat2_02, 1, 2);
+                T2(p004, "Наименование", "Name",         yzy2, sag, sut2_01 + sut2_02 + 0.5 * sut2_03, 0.25 * sat2_02, 0.75 * sat2_02, 1, 2);
+                T2(p004, "Кол.",         "Q-ty",         yzy2, sag, sut2_01 + sut2_02 + sut2_03 + 0.5 * sut2_04, 0.25 * sat2_02, 0.75 * sat2_02, 1, 2);
+                T2(p004, "Масса ед., кг","W. of pc.",    yzy1, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + 0.5 * sut2_05, 0.25 * sat2_02, 0.75 * sat2_02, 1, 2, 0.6);
+                T2(p004, "Примечание",   "Notes",        yzy1, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05 + 0.5 * sut2_06, 0.25 * sat2_02, 0.75 * sat2_02, 1, 2);
+
+                // Подзаголовки колонки "Наименование"
+                Text_(p004, "...",            yzy1, sag, sut2_01 + sut2_02 + 0.5 * sut2_03, asagi, sat2_02 + 0.25 * sat2_03, 1, 2);
+                Text_(p004, "...",            yzy1, sag, sut2_01 + sut2_02 + 0.5 * sut2_03, asagi, sat2_02 + 0.75 * sat2_03, 1, 2);
+                T2(p004, "%%UСтержни", "Details", yzy1, sag, sut2_01 + sut2_02 + 0.5 * sut2_03, sat2_02 + 1.25 * sat2_03, sat2_02 + 1.75 * sat2_03, 1, 2);
+                T2(p004, "Материал", "Material", yzy1, sag, sut2_01 + sut2_02 + 0.5 * sut2_03, sat2_02 + sat2_03 * (pozAdet + 3.25), sat2_02 + sat2_03 * (pozAdet + 3.75), 1, 2);
+                T2(p004, "Бетон",    "Concrete", yzy1, sag, sut2_01 + sut2_02 + 0.5 * sut2_03, sat2_02 + sat2_03 * (pozAdet + 4.25), sat2_02 + sat2_03 * (pozAdet + 4.75), 1, 2);
+                Text_(p004, "м³", yzy1, sag, sut2_01 + sut2_02 + sut2_03 + 0.5 * sut2_04,                         asagi, sat2_02 + sat2_03 * (pozAdet + 4.5), 1, 2);
+                Text_(p004, "...", yzy1, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + 0.5 * sut2_05,              asagi, sat2_02 + sat2_03 * (pozAdet + 4.5), 1, 2);
+                Text_(p004, "...", yzy1, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05 + 0.5 * sut2_06,   asagi, sat2_02 + sat2_03 * (pozAdet + 4.5), 1, 2);
+
+                if (pozAdet == tipBilgiAdet)
+                {
+                    string noteRus = "Размеры поз. 1-2 даны по внутр. граням.\nРазмеры остальных позиций даны по наруж. граням.";
+                    string noteEng = "Straight bars are conditionaly not presented in details list";
+                    T2(p004, noteRus, noteEng, yzy1, sag, 0.1 * sut2_01, sat2_02 + sat2_03 * (pozAdet + 5.25), sat2_02 + sat2_03 * (pozAdet + 5.75), 0, 2);
+                }
+
+                // Данные строк
+                for (int i = 0; i < pozAdet; i++)
+                {
+                    var info = toplamBilgi[i];
+                    Text_(p005, info.Poz, yzy1, sag, 0.5 * sut2_01, asagi, (i + 2.5) * sat2_03, 1, 2);
+                    T2(p005, "ГОСТ 34028-2016", "GOST 34028-2016", yzy1,
+                       sag, sut2_01 + 0.1 * sut2_02, (i + 2.25) * sat2_03, (i + 2.75) * sat2_03, 0, 2);
+                    Text_(p107, "%%C" + info.Cap, yzy1, sag, 0.05 * sut2_03, asagi, (i + 0.5) * sat2_03, 0, 2);
+                    Text_(p108, info.Malzeme,     yzy1, sag, 0.05 * sut2_03, asagi, (i + 0.5) * sat2_03, 0, 2);
+                    Text_(p109, info.Boy,         yzy1, sag, 0.05 * sut2_03, asagi, (i + 0.5) * sat2_03, 0, 2);
+                    Text_(p005, info.Adet, yzy1, sag, sut2_01 + sut2_02 + sut2_03 + 0.9 * sut2_04, asagi, (i + 2.5) * sat2_03, 2, 2);
+
+                    double cap = double.TryParse(info.Cap, out double cv) ? cv : 0;
+                    double bw  = Math.Floor(0.5 + 1000.0 * CpAg(cap)) * 0.001;
+                    double ew  = olcuCarp * info.BoyInt * bw;
+                    double tw  = (double.TryParse(info.Adet, out double av) ? av : 0) * ew;
+                    Text_(p005, ew.ToString("F2"), yzy1, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + 0.9 * sut2_05, asagi, (i + 2.5) * sat2_03, 2, 2);
+                    Text_(p005, tw.ToString("F2"), yzy1, sag, sut2_01 + sut2_02 + sut2_03 + sut2_04 + sut2_05 + 0.9 * sut2_06, asagi, (i + 2.5) * sat2_03, 2, 2);
+                }
+
+                // ============================================================
+                // ТАБЛИЦА 3: Ведомость расхода стали / Steel Flow Specification
+                // ============================================================
+                Point3d p007  = Polar(p006, asagi, sat3_01);
+                Point3d p008  = Polar(p007, asagi, 5 * sat3_01);
+                Point3d p010  = Polar(p007, sag,   sut3_01);
+                Point3d p011  = Polar(p010, asagi, sat3_01);
+                Point3d p012  = Polar(p011, asagi, sat3_01);
+                Point3d p013  = Polar(p012, asagi, sat3_01);
+                Point3d p014  = Polar(p013, asagi, sat3_01);
+                Point3d p026  = Polar(p011, sag,   (1 + capAdet) * sut3_02);
+                Point3d p032  = Polar(p006, sag,   sut3_01 + (1 + capAdet) * sut3_02 + sut3_03);
+                Point3d p033  = Polar(p032, asagi, sat3_01);
+                double t3w = sut3_01 + (1 + capAdet) * sut3_02 + sut3_03;
+
+                Line_(p006, sag,   t3w, 2);
+                Line_(p006, asagi, sat3_01, 2);
+                Line_(p032, asagi, sat3_01, 2);
+                Line_(p007, sag,   t3w, 1);
+                Line_(p007, asagi, 6 * sat3_01, 1);
+                Line_(p010, asagi, 6 * sat3_01, 1);
+                Line_(p033, asagi, 6 * sat3_01, 1);
+                Line_(p008, sag, t3w, 1);
+                Line_(Polar(p008, asagi, sat3_01), sag, t3w, 1);
+                Line_(p011, sag, (1 + capAdet) * sut3_02 + sut3_03, 1);
+                Line_(p012, sag, (1 + capAdet) * sut3_02, 1);
+                Line_(p013, sag, (1 + capAdet) * sut3_02, 1);
+                Line_(p014, sag, (1 + capAdet) * sut3_02, 1);
+                Line_(p026, asagi, 5 * sat3_01, 1);
+                Point3d p014cur = p014;
+                for (int i = 1; i <= capAdet; i++)
+                {
+                    p014cur = Polar(p014cur, sag, sut3_02);
+                    Line_(p014cur, asagi, 2 * sat3_01, 1);
+                }
+
+                T2(p006, "Ведомость расхода стали, кг", "Steel Flow Specification, kg", yzy2,
+                   sag, 0.5 * t3w, 0.3 * sat3_01, 0.7 * sat3_01, 1, 2);
+                T2(p007, "Марка элемента", "Mark of Element", yzy1,
+                   sag, 0.5 * sut3_01, 2.3 * sat3_01, 2.7 * sat3_01, 1, 2);
+                Text_(p008, "...", yzy1, sag, 0.5 * sut3_01, asagi, 0.3 * sat3_01, 1, 2);
+                Text_(p008, "...", yzy1, sag, 0.5 * sut3_01, asagi, 0.7 * sat3_01, 1, 2);
+                T2(p010, "Изделия арматурные", "Reinforcement Goods", yzy1,
+                   sag, 0.5 * ((1 + capAdet) * sut3_02 + sut3_03), 0.3 * sat3_01, 0.7 * sat3_01, 1, 2);
+                T2(p011, "Арматура класса", "Class of reinforcement", yzy1,
+                   sag, 0.5 * (1 + capAdet) * sut3_02, 0.3 * sat3_01, 0.7 * sat3_01, 1, 2, 0.73);
+                if (toplamBilgi.Count > 0)
+                    Text_(p012, toplamBilgi[0].Malzeme, yzy1, sag, 0.5 * (1 + capAdet) * sut3_02, asagi, 0.5 * sat3_01, 1, 2);
+                T2(p013, "ГОСТ 34028-2016", "GOST P 52544-2006", yzy1,
+                   sag, 0.5 * (1 + capAdet) * sut3_02, 0.3 * sat3_01, 0.7 * sat3_01, 1, 2);
+                T2(p026, "Всего", "Total", yzy1,
+                   sag, 0.5 * sut3_03, 1.8 * sat3_01, 2.2 * sat3_01, 1, 2);
+
+                double totalWt = 0;
+                for (int i = 0; i < capAdet; i++)
+                {
+                    double cap = double.TryParse(capListe[i].Cap, out double cv) ? cv : 0;
+                    double bw  = Math.Floor(0.5 + 1000.0 * CpAg(cap)) * 0.001;
+                    double wt  = olcuCarp * capListe[i].TotalLength * bw;
+                    totalWt   += wt;
+                    Text_(p013, "%%C" + capListe[i].Cap, yzy1, sag, (i + 0.5) * sut3_02, asagi, 1.5 * sat3_01, 1, 2);
+                    Text_(p013, wt.ToString("F2"),        yzy1, sag, (i + 0.5) * sut3_02, asagi, 2.5 * sat3_01, 1, 2);
+                }
+                T2(p013, "Итого", "Total", yzy1,
+                   sag, (capAdet + 0.5) * sut3_02, 1.5 * sat3_01, 1.8 * sat3_01, 1, 2);
+                Text_(p013, totalWt.ToString("F2"), yzy1, sag, (capAdet + 0.5) * sut3_02,          asagi, 2.5 * sat3_01, 1, 2);
+                Text_(p013, totalWt.ToString("F2"), yzy1, sag, (capAdet + 0.5) * sut3_02 + sut3_03, asagi, 2.5 * sat3_01, 1, 2);
+
+                tr.Commit();
+            }
+        }
+
+        // ====================================================================================
+        // РИСОВАНИЕ ТАБЛИЦ — три публичных метода
         // ====================================================================================
 
         private static void DrawTablesRussian(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
-        {
-            // TODO: Реализовать рисование таблиц на русском языке
-            // Аналог функции RENAISSANCE_metraj_tablo_ciz_rus
-        }
+            => DrawTablesCore(yerlesim, capListe, toplamBilgi, olcek, "rus");
 
         private static void DrawTablesEnglish(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
-        {
-            // TODO: Реализовать рисование таблиц на английском языке
-            // Аналог функции RENAISSANCE_metraj_tablo_ciz_eng
-        }
+            => DrawTablesCore(yerlesim, capListe, toplamBilgi, olcek, "eng");
 
         private static void DrawTablesRussianEnglish(Point3d yerlesim, List<DiameterInfo> capListe, List<RebarPositionInfo> toplamBilgi, double olcek)
-        {
-            // TODO: Реализовать рисование таблиц на русском и английском языках
-            // Аналог функции RENAISSANCE_metraj_tablo_ciz_re
-        }
+            => DrawTablesCore(yerlesim, capListe, toplamBilgi, olcek, "re");
     }
 }
 

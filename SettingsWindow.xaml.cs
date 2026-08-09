@@ -188,9 +188,12 @@ namespace PoseEdit2026
                     AppSettings.ProjectName = cmbProjectName.Text ?? ""; // Если null, сохраняем пустую строку
                 }
 
+                // Сохраняем в файл на диске
+                AppSettings.SaveToFiles();
+
                 // Показываем сообщение об успешном сохранении
                 MessageBox.Show("Settings saved successfully!", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
-                
+
                 // Закрываем окно (DialogResult = true означает "настройки сохранены")
                 this.DialogResult = true;
                 this.Close();
