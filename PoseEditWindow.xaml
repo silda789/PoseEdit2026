@@ -288,22 +288,22 @@
                             <!-- Поля внизу занимают сколько нужно -->
                             </Grid.RowDefinitions>
 
-                            <GroupBox Header="Rebar Shape Preview" Grid.Row="0" Padding="15">
-                        <!-- 
+                            <GroupBox Header="Rebar Shape Preview" Grid.Row="0" Padding="15" ClipToBounds="True">
+                        <!--
                     Улучшенное отображение изображения:
                     - Stretch="Uniform" - сохраняет пропорции, вписывается в контейнер (НЕ обрезает края)
                     - RenderOptions.BitmapScalingMode="HighQuality" - высокое качество масштабирования (четкие линии)
                     - RenderOptions.CachingHint="Cache" - кэширование для лучшей производительности
-                    - MinWidth и MinHeight - минимальные размеры для гарантии видимости (увеличено для лучшей читаемости)
+                    - Без MinWidth/MinHeight: окно фиксированного размера (960x430, NoResize), реальное
+                      место под картинку в правой колонке меньше 350px, из-за чего принудительный
+                      минимум расталкивал картинку за рамку панели. ClipToBounds подстраховывает.
                     - HorizontalAlignment и VerticalAlignment="Center" - центрирование изображения
                     -->
                         <Image x:Name="imgPreview"
                            Stretch="Uniform"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="15"
-                           MinWidth="350"
-                           MinHeight="350"
+                           Margin="8"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            RenderOptions.CachingHint="Cache"/>
                             </GroupBox>
