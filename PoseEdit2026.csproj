@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -114,7 +114,15 @@
     <EmbeddedResource Include="Resources\RL-POS2.dwg" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!-- AutoCAD 2024: .NET Framework 4.8 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="AutoCAD.NET" Version="24.3.0" />
+    <PackageReference Include="AutoCAD.NET.Core" Version="24.3.0" />
+    <PackageReference Include="AutoCAD.NET.Model" Version="24.3.0" />
+  </ItemGroup>
+
+  <!-- AutoCAD 2025 + 2026: .NET 8 (25.1.0 is API-compatible with 2026 at runtime) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
     <PackageReference Include="AutoCAD.NET" Version="25.1.0" />
     <PackageReference Include="AutoCAD.NET.Core" Version="25.1.0" />
     <PackageReference Include="AutoCAD.NET.Model" Version="25.1.0" />

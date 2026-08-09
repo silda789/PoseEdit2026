@@ -28,8 +28,10 @@
 #nullable disable
 
 using System;
+using System.Globalization;
 using System.IO;
-using System.Text.Json;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PoseEdit2026
 {
@@ -183,7 +185,6 @@ namespace PoseEdit2026
         /// // Вызов при старте программы
         /// AppSettings.LoadFromFiles();
         /// </example>
-        // Путь к файлу настроек: рядом с DLL
         private static string SettingsFilePath
         {
             get
@@ -194,16 +195,6 @@ namespace PoseEdit2026
             }
         }
 
-        // DTO для сериализации
-        private class SettingsDto
-        {
-            public double DrawingUnit    { get; set; } = 1000.0;
-            public double SheetScale     { get; set; } = 50.0;
-            public string TableLanguage  { get; set; } = "rus";
-            public string[] TablePlacement { get; set; } = ["0", "0", "1"];
-            public string ProjectName    { get; set; } = "";
-        }
-
         /// <summary>Загружает настройки из файла JSON рядом с DLL.</summary>
         public static void LoadFromFiles()
         {
@@ -211,14 +202,19 @@ namespace PoseEdit2026
             {
                 string path = SettingsFilePath;
                 if (!File.Exists(path)) return;
-                string json = File.ReadAllText(path);
-                var dto = JsonSerializer.Deserialize<SettingsDto>(json);
-                if (dto == null) return;
-                _drawingUnit    = dto.DrawingUnit;
-                _sheetScale     = dto.SheetScale;
-                _tableLanguage  = dto.TableLanguage ?? "rus";
-                _tablePlacement = dto.TablePlacement ?? ["0", "0", "1"];
-                _projectName    = dto.ProjectName ?? "";
+                string json = File.ReadAllText(path, Encoding.UTF8);
+
+                double? du = ReadJsonDouble(json, "DrawingUnit");
+                double? ss = ReadJsonDouble(json, "SheetScale");
+                string tl  = ReadJsonString(json, "TableLanguage");
+                string pn  = ReadJsonString(json, "ProjectName");
+                string[] tp = ReadJsonStringArray(json, "TablePlacement");
+
+                if (du.HasValue) _drawingUnit   = du.Value;
+                if (ss.HasValue) _sheetScale     = ss.Value;
+                if (tl != null)  _tableLanguage  = tl;
+                if (pn != null)  _projectName    = pn;
+                if (tp != null)  _tablePlacement = tp;
             }
             catch { }
         }
@@ -228,18 +224,51 @@ namespace PoseEdit2026
         {
             try
             {
-                var dto = new SettingsDto
-                {
-                    DrawingUnit    = _drawingUnit,
-                    SheetScale     = _sheetScale,
-                    TableLanguage  = _tableLanguage,
-                    TablePlacement = _tablePlacement,
-                    ProjectName    = _projectName
-                };
-                string json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(SettingsFilePath, json);
+                string p0 = _tablePlacement != null && _tablePlacement.Length > 0 ? _tablePlacement[0] : "0";
+                string p1 = _tablePlacement != null && _tablePlacement.Length > 1 ? _tablePlacement[1] : "0";
+                string p2 = _tablePlacement != null && _tablePlacement.Length > 2 ? _tablePlacement[2] : "1";
+
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  \"DrawingUnit\": " + _drawingUnit.ToString("R", CultureInfo.InvariantCulture) + ",");
+                sb.AppendLine("  \"SheetScale\": " + _sheetScale.ToString("R", CultureInfo.InvariantCulture) + ",");
+                sb.AppendLine("  \"TableLanguage\": \"" + JsonEsc(_tableLanguage) + "\",");
+                sb.AppendLine("  \"TablePlacement\": [\"" + p0 + "\",\"" + p1 + "\",\"" + p2 + "\"],");
+                sb.AppendLine("  \"ProjectName\": \"" + JsonEsc(_projectName) + "\"");
+                sb.Append("}");
+                File.WriteAllText(SettingsFilePath, sb.ToString(), Encoding.UTF8);
             }
             catch { }
+        }
+
+        private static string JsonEsc(string s)
+            => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+        private static double? ReadJsonDouble(string json, string key)
+        {
+            var m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*([0-9\\.eE+\\-]+)");
+            if (m.Success && double.TryParse(m.Groups[1].Value,
+                NumberStyles.Float, CultureInfo.InvariantCulture, out double v))
+                return v;
+            return null;
+        }
+
+        private static string ReadJsonString(string json, string key)
+        {
+            var m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            if (m.Success) return m.Groups[1].Value.Replace("\\\"", "\"").Replace("\\\\", "\\");
+            return null;
+        }
+
+        private static string[] ReadJsonStringArray(string json, string key)
+        {
+            var m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
+            if (!m.Success) return null;
+            var items = Regex.Matches(m.Groups[1].Value, "\"([^\"]*)\"");
+            if (items.Count == 0) return null;
+            var result = new string[items.Count];
+            for (int i = 0; i < items.Count; i++) result[i] = items[i].Groups[1].Value;
+            return result;
         }
     }
 }
