@@ -297,10 +297,11 @@
                     - MinWidth и MinHeight - минимальные размеры для гарантии видимости (увеличено для лучшей читаемости)
                     - HorizontalAlignment и VerticalAlignment="Center" - центрирование изображения
                     -->
-                        <Image x:Name="imgPreview" 
+                        <Image x:Name="imgPreview"
                            Stretch="Uniform"
-                           HorizontalAlignment="Center" 
+                           HorizontalAlignment="Center"
                            VerticalAlignment="Center"
+                           Margin="15"
                            MinWidth="350"
                            MinHeight="350"
                            RenderOptions.BitmapScalingMode="HighQuality"
