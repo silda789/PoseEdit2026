@@ -4,7 +4,13 @@
       "Bash(claude *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\durum\\\\Documents\\\\GitHub\\\\PoseEdit2026\" -Force)",
       "Bash(Format-Table -AutoSize)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\durum\\\\Documents\\\\GitHub\\\\PoseEdit2026\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(Sort-Object)",
+      "Bash(dotnet build *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
