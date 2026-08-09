@@ -260,6 +260,41 @@ namespace PoseEdit2026
         }
 
         // ====================================================================================
+        // ФУНКЦИЯ: AngleRad / AngleDeg (Угол в стиле AutoLISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Воспроизводит поведение функции AutoLISP (angle p1 p2), которая
+        // всегда возвращает угол в диапазоне [0, 2π) — а НЕ [-π, π], как обычный Atan2.
+        //
+        // ПОЧЕМУ ЭТО ВАЖНО:
+        //   Lisp-код сравнивает углы с условиями вида (> alfa2 270) (< alfa2 360).
+        //   Если использовать обычный Math.Atan2 (диапазон -180..180), то эти условия
+        //   никогда не сработают для отрицательных углов, и много форм арматуры (типы
+        //   18, 19, 24-29, 35, 38-40, 44-46, 48-49, 52, 55, 59, 61, 62, 65 и др.)
+        //   не будут распознаваться — именно поэтому старый Lisp узнавал все эскизы,
+        //   а C#-порт — нет.
+        private static double AngleRad(Point3d from, Point3d to)
+        {
+            double a = Math.Atan2(to.Y - from.Y, to.X - from.X);
+            if (a < 0) a += 2.0 * Math.PI;
+            return a;
+        }
+
+        private static double AngleDeg(double rad)
+        {
+            // (fix (+ 0.5 (/ (* 180 angle) pi))) — округление до целого градуса
+            double d = Math.Floor(0.5 + rad * 180.0 / Math.PI);
+            if (d >= 360) d = 0; // (if (= alfa 360) (setq alfa 0))
+            return d;
+        }
+
+        // Округлённая проекция (используется в формулах Sin/Cos поправок, аналог
+        // (float (* (fix (+ (/ (* oran (abs (* boy (Sin/Cos angle)))) SAYI) 0.5)) SAYI)) )
+        private static double Proj(double boy, double trig) => Round(Math.Abs(boy * trig));
+
+        // Сравнение округлённых до 10мм длин (аналог Lisp "=" для float, полученных Round())
+        private static bool Eq(double a, double b) => Math.Abs(a - b) < 0.1;
+
+        // ====================================================================================
         // ФУНКЦИЯ: Normalize3Points (Нормализация 3 точек)
         // ====================================================================================
         // НАЗНАЧЕНИЕ: Приводит 3 точки к стандартному виду для анализа
@@ -562,82 +597,164 @@ namespace PoseEdit2026
             List<Point3d> pp = Normalize4Points(pts);
 
             // ШАГ 2: ВЫЧИСЛЯЕМ ДЛИНЫ ВСЕХ СЕГМЕНТОВ
-            double boy1 = Round(_scale * pp[0].DistanceTo(pp[1])); // Первый сегмент
-            double boy2 = Round(_scale * pp[1].DistanceTo(pp[2])); // Второй сегмент (средний)
-            double boy3 = Round(_scale * pp[2].DistanceTo(pp[3])); // Третий сегмент
+            double boy1 = Round(_scale * pp[0].DistanceTo(pp[1])); // A
+            double boy2 = Round(_scale * pp[1].DistanceTo(pp[2])); // B (средний)
+            double boy3 = Round(_scale * pp[2].DistanceTo(pp[3])); // C
 
-            // ШАГ 3: ВЫЧИСЛЯЕМ УГЛЫ МЕЖДУ СЕГМЕНТАМИ
-            // alfa1 - угол первого сегмента относительно горизонтали
-            // alfa2 - угол третьего сегмента относительно горизонтали
-            double alfa1 = (int)(0.5 + (Math.Atan2(pp[0].Y, pp[0].X) * 180.0 / Math.PI));
-            double alfa2 = (int)(0.5 + (Math.Atan2(pp[3].Y - pp[2].Y, pp[3].X - pp[2].X) * 180.0 / Math.PI));
-            if (alfa1 == 360) alfa1 = 0; // 360° = 0°
-            if (alfa2 == 360) alfa2 = 0;
+            // ШАГ 3: УГЛЫ (в стиле AutoLISP, диапазон 0..360°)
+            // alfa1 = angle(PP2,PP1) - направление от второй точки к первой
+            // alfa2 = angle(PP3,PP4) - направление от третьей точки к четвёртой
+            double alfa1Rad = AngleRad(pp[1], pp[0]);
+            double alfa2Rad = AngleRad(pp[2], pp[3]);
+            double alfa1 = AngleDeg(alfa1Rad);
+            double alfa2 = AngleDeg(alfa2Rad);
 
-            // ШАГ 4: ЗАПИСЫВАЕМ ДЛИНЫ В РЕЗУЛЬТАТ
-            res.A = boy1.ToString("0");
-            res.B = boy2.ToString("0");
-            res.C = boy3.ToString("0");
-            res.D = "0";
-            res.E = "0";
+            // ШАГ 4: ПОЛНЫЙ ПОРТ ВЕТВЛЕНИЯ ИЗ Lisp donati_tani_3 (POSEDIT.LSP, ~строки 661-1084)
             res.F = "0";
             res.R = "0";
 
-            // ШАГ 5: ПРОВЕРЯЕМ НА УТКУ (ТИП 41)
-            // Утка - это когда первый и последний сегмент ПАРАЛЛЕЛЬНЫ
-            // Создаем векторы из сегментов
-            Vector3d v1 = new Vector3d(pp[0].X, pp[0].Y, 0); // Вектор первого сегмента
-            Vector3d v3 = new Vector3d(pp[3].X - pp[2].X, pp[3].Y - pp[2].Y, 0); // Вектор третьего сегмента
-
-            // IsParallelTo - проверяет, параллельны ли векторы
-            // Tolerance(0.05, 0.05) - допуск на погрешность (5%)
-            if (v1.IsParallelTo(v3, new Tolerance(0.05, 0.05)))
+            if (alfa1 < 90 && alfa2 > 90 && alfa2 < 180)
             {
-                res.Type = "41"; // Утка (Crank)
-                return; // Выходим из функции, дальше не проверяем
-            }
-
-            // ШАГ 6: ОПРЕДЕЛЯЕМ ТИП ПО УГЛАМ
-            if (alfa1 == 90 && alfa2 == 90)
-            {
-                // ОБА УГЛА 90° - это П или Z
-                // Проверяем направление поворотов
-                bool turn1 = GetTurnDirection(pp[0], pp[1], pp[2]); // Направление первого поворота
-                bool turn2 = GetTurnDirection(pp[1], pp[2], pp[3]); // Направление второго поворота
-
-                if (turn1 == turn2)
-                    res.Type = "21"; // П-образная (повороты в одну сторону)
+                double boy4 = Proj(boy1, Math.Sin(alfa1Rad));
+                double boy5 = Proj(boy3, Math.Sin(alfa2Rad));
+                if (Eq(boy1, boy4) && Eq(boy3, boy5))
+                    Set(res, "21", boy1, boy2, boy3, 0, 0);
                 else
-                    res.Type = "25"; // Z-образная (повороты в разные стороны)
+                    Set(res, "17", boy1, boy3, boy4, boy5, boy2);
             }
-            else if (alfa1 < 90 && alfa2 > 90 && alfa2 < 180)
+            else if (alfa1 < 90 && alfa2 == 90)
             {
-                // ПЕРВЫЙ УГОЛ ОСТРЫЙ, ВТОРОЙ ТУПОЙ
-                // Вычисляем проекции сегментов
-                double boy4 = Round(_scale * Math.Abs(boy1 * Math.Sin(Math.Atan2(pp[0].Y, pp[0].X))));
-                double boy5 = Round(_scale * Math.Abs(boy3 * Math.Sin(Math.Atan2(pp[3].Y - pp[2].Y, pp[3].X - pp[2].X))));
-
-                // Если проекции равны длинам - это П-образная
-                if (Math.Abs(boy1 - boy4) < 0.1 && Math.Abs(boy3 - boy5) < 0.1)
+                double boy4 = Proj(boy1, Math.Sin(alfa1Rad));
+                if (Eq(boy1, boy4))
+                    Set(res, "21", boy1, boy2, boy3, 0, 0);
+                else if (boy2 > boy3)
+                    Set(res, "18", boy1, boy2, boy3, boy4, 0);
+                else
+                    Set(res, "40", boy2, boy3, boy1, 0, 0);
+            }
+            else if (alfa1 == 90 && alfa2 > 90 && alfa2 < 180)
+            {
+                double boy4 = Proj(boy3, Math.Sin(alfa2Rad));
+                if (Eq(boy3, boy4))
+                    Set(res, "21", boy3, boy2, boy1, 0, 0);
+                else if (boy2 > boy1)
+                    Set(res, "18", boy3, boy2, boy1, boy4, 0);
+                else
+                    Set(res, "40", boy2, boy1, boy3, 0, 0);
+            }
+            else if (alfa1 < 90 && alfa2 < 90)
+            {
+                if (alfa1 == alfa2 && (boy1 > boy2 || boy3 > boy2))
                 {
-                    res.Type = "21"; // П-образная
+                    Set(res, "29", boy1, boy2, boy3, Proj(boy2, Math.Sin(alfa1Rad)), 0);
                 }
                 else
                 {
-                    // Специальная форма (тип 17)
-                    res.Type = "17";
-                    res.D = boy5.ToString("0");
-                    res.E = boy2.ToString("0");
-                    res.A = boy1.ToString("0");
-                    res.B = boy3.ToString("0");
-                    res.C = boy4.ToString("0");
+                    double boy4 = Proj(boy1, Math.Sin(alfa1Rad));
+                    double boy5 = Proj(boy3, Math.Sin(alfa2Rad));
+                    if (Eq(boy1, boy4) && Eq(boy3, boy5))
+                        Set(res, "21", boy1, boy2, boy3, 0, 0);
+                    else
+                        Set(res, "19", boy1, boy3, boy4, boy5, boy2);
                 }
+            }
+            else if (alfa1 > 90 && alfa2 > 90 && alfa2 < 180)
+            {
+                if (alfa1 == alfa2 && (boy1 > boy2 || boy3 > boy2))
+                {
+                    Set(res, "29", boy3, boy2, boy1, Proj(boy2, Math.Sin(alfa2Rad)), 0);
+                }
+                else
+                {
+                    double boy4 = Proj(boy3, Math.Sin(alfa2Rad));
+                    double boy5 = Proj(boy1, Math.Sin(alfa1Rad));
+                    if (Eq(boy3, boy4) && Eq(boy1, boy5))
+                        Set(res, "21", boy3, boy2, boy1, 0, 0);
+                    else
+                        Set(res, "19", boy3, boy1, boy4, boy5, boy2);
+                }
+            }
+            else if (alfa1 == 90 && alfa2 == 90)
+            {
+                string tip = (boy1 > boy2 || boy3 > boy2) ? "38" : "21";
+                Set(res, tip, Math.Min(boy1, boy3), boy2, Math.Max(boy1, boy3), 0, 0);
+            }
+            else if (alfa1 == 90 && alfa2 == 270)
+            {
+                Set(res, "23", Math.Min(boy1, boy3), boy2, Math.Max(boy1, boy3), 0, 0);
+            }
+            else if (alfa1 > 90 && alfa2 < 90)
+            {
+                double boy4 = Proj(boy1, Math.Sin(alfa1Rad));
+                double boy5 = Proj(boy3, Math.Sin(alfa2Rad));
+                if (Eq(boy1, boy4) && Eq(boy3, boy5))
+                {
+                    Set(res, "21", boy1, boy2, boy3, 0, 0);
+                }
+                else if (boy1 > boy2 || boy3 > boy2)
+                {
+                    double d = Proj(boy2, Math.Sin(boy1 > boy3 ? alfa1Rad : alfa2Rad));
+                    Set(res, "24", Math.Max(boy1, boy3), boy2, Math.Min(boy1, boy3), d, 0);
+                }
+                else
+                {
+                    Set(res, "25", boy1, boy3, boy4, boy5, boy2);
+                }
+            }
+            else if (alfa1 == 90 && alfa2 < 90)
+            {
+                double boy4 = Proj(boy3, Math.Sin(alfa2Rad));
+                if (Eq(boy3, boy4))
+                    Set(res, "21", boy3, boy2, boy1, 0, 0);
+                else
+                    Set(res, "27", boy3, boy2, boy1, boy4, 0);
+            }
+            else if (alfa1 > 90 && alfa2 == 90)
+            {
+                double boy4 = Proj(boy1, Math.Sin(alfa1Rad));
+                if (Eq(boy1, boy4))
+                    Set(res, "21", boy1, boy2, boy3, 0, 0);
+                else
+                    Set(res, "27", boy1, boy2, boy3, boy4, 0);
+            }
+            else if (alfa1 == 90 && alfa2 > 270 && alfa2 < 360)
+            {
+                Set(res, "28", boy3, boy2, boy1, Proj(boy3, Math.Sin(alfa2Rad)), 0);
+            }
+            else if (alfa1 > 90 && alfa2 == 270)
+            {
+                Set(res, "28", boy1, boy2, boy3, Proj(boy1, Math.Sin(alfa1Rad)), 0);
+            }
+            else if (alfa1 > 90 && alfa2 > 270 && alfa2 < 360)
+            {
+                if (boy1 > boy2 || boy3 > boy2)
+                    Set(res, "26", Math.Max(boy1, boy3), boy2, Math.Min(boy1, boy3), Proj(boy2, Math.Sin(alfa2Rad)), 0);
+                else
+                    Set(res, "45", boy1, boy3, Proj(boy1, Math.Sin(alfa1Rad)), Proj(boy3, Math.Sin(alfa2Rad)), boy2);
+            }
+            else if (alfa1 > 90 && alfa2 > 180 && alfa2 < 270)
+            {
+                Set(res, "55", boy1, boy3, Proj(boy1, Math.Sin(alfa1Rad)), Proj(boy3, Math.Sin(alfa2Rad)), boy2);
+            }
+            else if (alfa1 < 90 && alfa2 > 270 && alfa2 < 360)
+            {
+                Set(res, "55", boy3, boy1, Proj(boy3, Math.Sin(alfa2Rad)), Proj(boy1, Math.Sin(alfa1Rad)), boy2);
             }
             else
             {
-                // ДРУГИЕ СЛУЧАИ - не распознано
                 res.Type = "99";
             }
+        }
+
+        // Заполняет A..E (и Type), F/R предполагаются уже выставленными в "0" вызывающей стороной
+        private static void Set(RebarResult res, string type, double a, double b, double c, double d, double e)
+        {
+            res.Type = type;
+            res.A = a.ToString("0");
+            res.B = b.ToString("0");
+            res.C = c.ToString("0");
+            res.D = d.ToString("0");
+            res.E = e.ToString("0");
         }
 
         // ====================================================================================
@@ -657,8 +774,17 @@ namespace PoseEdit2026
         //   res - объект результата
         private static void Recognize5Points(List<Point3d> pts, RebarResult res)
         {
-            // ШАГ 1: НОРМАЛИЗАЦИЯ ДЛЯ 5 ТОЧЕК
-            // Переносим в начало координат относительно второй точки
+            // ШАГ 0: ПЕРЕСТАНОВКА ТОЧЕК (аналог Lisp donati_tani_4, если сегмент P3-P4 длиннее P2-P3)
+            // Меняем местами P1<->P5 и P2<->P4, чтобы длинный "хвост" всегда шёл первым
+            double d23 = pts[1].DistanceTo(pts[2]);
+            double d34 = pts[2].DistanceTo(pts[3]);
+            if (d34 > d23)
+            {
+                (pts[0], pts[4]) = (pts[4], pts[0]);
+                (pts[1], pts[3]) = (pts[3], pts[1]);
+            }
+
+            // ШАГ 1: НОРМАЛИЗАЦИЯ ДЛЯ 5 ТОЧЕК (относительно второй точки)
             Point3d p2 = pts[1];
             List<Point3d> pp = new List<Point3d>();
             foreach (var pt in pts)
@@ -697,47 +823,79 @@ namespace PoseEdit2026
             }
 
             // ШАГ 6: ВЫЧИСЛЯЕМ ДЛИНЫ ВСЕХ СЕГМЕНТОВ
-            double boy1 = Round(_scale * pp[0].DistanceTo(pp[1]));
-            double boy2 = Round(_scale * pp[1].DistanceTo(pp[2]));
-            double boy3 = Round(_scale * pp[2].DistanceTo(pp[3]));
-            double boy4 = Round(_scale * pp[3].DistanceTo(pp[4]));
+            double boy1 = Round(_scale * pp[0].DistanceTo(pp[1])); // A
+            double boy2 = Round(_scale * pp[1].DistanceTo(pp[2])); // B
+            double boy3 = Round(_scale * pp[2].DistanceTo(pp[3])); // C
+            double boy4 = Round(_scale * pp[3].DistanceTo(pp[4])); // D
 
-            // ШАГ 7: ВЫЧИСЛЯЕМ УГЛЫ
-            double alfa1 = (int)(0.5 + (Math.Atan2(pp[0].Y, pp[0].X) * 180.0 / Math.PI));
-            double alfa2 = (int)(0.5 + (Math.Atan2(pp[3].Y - pp[2].Y, pp[3].X - pp[2].X) * 180.0 / Math.PI));
-            double alfa3 = (int)(0.5 + (Math.Atan2(pp[4].Y - pp[3].Y, pp[4].X - pp[3].X) * 180.0 / Math.PI));
-            if (alfa1 == 360) alfa1 = 0;
-            if (alfa2 == 360) alfa2 = 0;
-            if (alfa3 == 360) alfa3 = 0;
+            // ШАГ 7: УГЛЫ (в стиле AutoLISP, диапазон 0..360°)
+            double alfa1Rad = AngleRad(pp[1], pp[0]);       // angle(PP2,PP1)
+            double alfa2Rad = AngleRad(pp[2], pp[3]);       // angle(PP3,PP4)
+            double alfa3Rad = AngleRad(pp[3], pp[4]);       // angle(PP4,PP5)
+            double alfa1 = AngleDeg(alfa1Rad);
+            double alfa2 = AngleDeg(alfa2Rad);
+            double alfa3 = AngleDeg(alfa3Rad);
 
-            // ШАГ 8: ЗАПИСЫВАЕМ ДЛИНЫ В РЕЗУЛЬТАТ
-            res.A = boy1.ToString("0");
-            res.B = boy2.ToString("0");
-            res.C = boy3.ToString("0");
-            res.D = boy4.ToString("0");
-            res.E = "0";
+            // ШАГ 8: ПОЛНЫЙ ПОРТ ВЕТВЛЕНИЯ ИЗ Lisp donati_tani_4 (POSEDIT.LSP, ~строки 1085-1298)
             res.F = "0";
             res.R = "0";
 
-            // ШАГ 9: ОПРЕДЕЛЯЕМ ТИП ПО УГЛАМ
-            if (alfa1 == 90 && alfa2 == 90 && alfa3 == 180)
+            if (alfa1 > 90 && alfa2 < 90 && Eq(Math.Abs(alfa2 - alfa3), 90))
             {
-                // ХОМУТ (квадрат) - все углы 90°, последний 180° (замыкается)
-                res.Type = "31"; // Хомут
+                Set(res, "30", boy1, boy2, boy3, Proj(boy2, Math.Sin(alfa1Rad)), boy4);
             }
             else if (alfa1 == 90 && alfa2 < 90 && alfa3 == 90)
             {
-                // СПЕЦИАЛЬНАЯ ФОРМА (тип 30)
-                res.Type = "30";
-                res.A = boy4.ToString("0");
-                res.B = boy3.ToString("0");
-                res.C = boy2.ToString("0");
-                res.D = Round(_scale * Math.Abs(boy3 * Math.Cos(Math.Atan2(pp[3].Y - pp[2].Y, pp[3].X - pp[2].X)))).ToString("0");
-                res.E = boy1.ToString("0");
+                Set(res, "30", boy4, boy3, boy2, Proj(boy3, Math.Cos(alfa2Rad)), boy1);
+            }
+            else if (alfa1 == 90 && alfa2 == 90 && alfa3 == 180)
+            {
+                Set(res, "31", boy4, boy3, boy2, boy1, 0);
+            }
+            else if (alfa1 < 90 && alfa2 == 90 && alfa3 == 180)
+            {
+                Set(res, "53", boy4, boy3, boy2, boy1, 0);
+            }
+            else if (alfa1 == 90 && alfa2 == 90 && alfa3 > 90 && alfa3 < 180)
+            {
+                res.Type = "61";
+                res.A = boy1.ToString("0");
+                res.B = boy2.ToString("0");
+                res.C = boy3.ToString("0");
+                res.D = boy4.ToString("0");
+                res.E = "0";
+                res.F = Proj(boy4, Math.Sin(alfa3Rad)).ToString("0");
+            }
+            else if (alfa1 == 90 && alfa2 == 270 && alfa3 == 180)
+            {
+                Set(res, "32", boy1, boy2, boy3, boy4, 0);
+            }
+            else if (alfa1 > 90 && alfa1 < 180 && alfa2 == 90 && alfa3 == 180)
+            {
+                Set(res, "36", boy1, boy2, boy3, boy4, Proj(boy1, Math.Sin(alfa1Rad)));
+            }
+            else if (alfa1 == 90 && alfa2 < 90 && alfa3 == 0)
+            {
+                Set(res, "54", boy1, boy2, boy3, boy4, Proj(boy3, Math.Sin(alfa2Rad)));
+            }
+            else if (Eq(Math.Abs(alfa1 - alfa2), 180) && Eq(Math.Abs(alfa2 - alfa3), 90))
+            {
+                Set(res, "34", boy1, boy2, boy3, Proj(boy2, Math.Sin(alfa1Rad)), boy4);
+            }
+            else if (alfa1 == 90 && alfa2 > 270 && alfa2 < 360 && alfa3 == 0)
+            {
+                Set(res, "35", boy4, boy3, boy2, Proj(boy3, Math.Sin(alfa2Rad)), boy1);
+            }
+            else if (Eq(Math.Abs(alfa1 - alfa2), 180) && Eq(Math.Abs(alfa2 - alfa3), 270))
+            {
+                Set(res, "35", boy1, boy2, boy3, Proj(boy2, Math.Sin(alfa1Rad)), boy4);
+            }
+            else if (alfa1 < 90 && alfa2 == 90 && alfa3 > 180 && alfa3 < 270)
+            {
+                Set(res, "52", boy3, boy2, boy4, boy1, 0);
             }
             else
             {
-                // НЕ РАСПОЗНАНО
                 res.Type = "99";
             }
         }
@@ -791,34 +949,95 @@ namespace PoseEdit2026
             }
 
             // ШАГ 3: ВЫЧИСЛЯЕМ ДЛИНЫ
-            double boy1 = Round(_scale * pp[0].DistanceTo(pp[1]));
-            double boy2 = Round(_scale * pp[1].DistanceTo(pp[2]));
-            double boy3 = Round(_scale * pp[2].DistanceTo(pp[3]));
-            double boy4 = Round(_scale * pp[3].DistanceTo(pp[4]));
-            double boy5 = Round(_scale * pp[4].DistanceTo(pp[5]));
+            double boy1 = Round(_scale * pp[0].DistanceTo(pp[1])); // A
+            double boy2 = Round(_scale * pp[1].DistanceTo(pp[2])); // B
+            double boy3 = Round(_scale * pp[2].DistanceTo(pp[3])); // C
+            double boy4 = Round(_scale * pp[3].DistanceTo(pp[4])); // D
+            double boy5 = Round(_scale * pp[4].DistanceTo(pp[5])); // E
 
-            // ШАГ 4: ЗАПИСЫВАЕМ ДЛИНЫ
-            res.A = boy1.ToString("0");
-            res.B = boy2.ToString("0");
-            res.C = boy3.ToString("0");
-            res.D = boy4.ToString("0");
-            res.E = boy5.ToString("0");
-            res.F = "0";
+            // ШАГ 4: УГЛЫ (в стиле AutoLISP, диапазон 0..360°)
+            double a1r = AngleRad(pp[1], pp[0]); // angle(PP2,PP1)
+            double a2r = AngleRad(pp[2], pp[1]); // angle(PP3,PP2)
+            double a3r = AngleRad(pp[3], pp[4]); // angle(PP4,PP5)
+            double a4r = AngleRad(pp[4], pp[5]); // angle(PP5,PP6)
+            double alfa1 = AngleDeg(a1r);
+            double alfa2 = AngleDeg(a2r);
+            double alfa3 = AngleDeg(a3r);
+            double alfa4 = AngleDeg(a4r);
+
             res.R = "0";
 
-            // ШАГ 5: ПРОВЕРЯЕМ НА УТКУ (ТИП 41)
-            // Создаем векторы первого и последнего сегментов
-            Vector3d v1 = new Vector3d(pp[0].X - pp[1].X, pp[0].Y - pp[1].Y, 0);
-            Vector3d v5 = new Vector3d(pp[5].X - pp[4].X, pp[5].Y - pp[4].Y, 0);
-
-            // Если векторы параллельны - это Утка
-            if (v1.IsParallelTo(v5, new Tolerance(0.1, 0.1)))
+            // ШАГ 5: ПОЛНЫЙ ПОРТ ВЕТВЛЕНИЯ ИЗ Lisp donati_tani_5 (POSEDIT.LSP, ~строки 1300-1495)
+            if (alfa1 == alfa3 && alfa2 == alfa4 && Eq(Math.Abs(alfa1 - alfa2), 90) && Eq(Math.Abs(alfa3 - alfa4), 90))
             {
-                res.Type = "41"; // Утка
+                res.Type = "20";
+                if (boy2 > boy4)
+                {
+                    res.A = boy1.ToString("0"); res.B = boy2.ToString("0"); res.C = boy3.ToString("0");
+                    res.D = boy4.ToString("0"); res.E = boy5.ToString("0");
+                    res.F = Proj(boy3, Math.Sin(a2r)).ToString("0");
+                }
+                else
+                {
+                    res.A = boy5.ToString("0"); res.B = boy4.ToString("0"); res.C = boy3.ToString("0");
+                    res.D = boy2.ToString("0"); res.E = boy1.ToString("0");
+                    res.F = Proj(boy3, Math.Sin(a3r)).ToString("0");
+                }
+            }
+            else if (alfa1 > 270 && alfa2 == 90 && alfa3 == 90 && alfa4 > 180 && alfa4 < 270)
+            {
+                Set(res, "39", boy2, boy3, boy4, boy1, boy5);
+                res.F = "0";
+            }
+            else if (alfa1 == 0 && alfa2 == 90 && alfa3 == 90 && alfa4 == 180)
+            {
+                Set(res, "41", boy1, boy2, boy3, boy4, boy5);
+                res.F = "0";
+            }
+            else if (alfa1 == 180 && alfa2 == 90 && alfa3 == 90 && alfa4 == 0)
+            {
+                Set(res, "44", boy1, boy2, boy3, boy4, boy5);
+                res.F = "0";
+            }
+            else if (alfa1 == 180 && alfa2 > 90 && alfa2 < 180 && alfa3 < 90 && alfa4 == 0 && Eq(boy2, boy4))
+            {
+                res.Type = "46";
+                res.A = boy1.ToString("0"); res.B = boy2.ToString("0"); res.C = boy3.ToString("0");
+                res.D = Proj(boy2, Math.Sin(a2r)).ToString("0");
+                res.E = boy5.ToString("0");
+                res.F = "0";
+            }
+            else if (alfa1 == 0 && alfa2 == 90 && alfa3 < 90 && alfa4 == 90)
+            {
+                res.Type = "59";
+                res.A = boy1.ToString("0"); res.B = boy2.ToString("0"); res.C = boy3.ToString("0");
+                res.D = boy4.ToString("0"); res.E = boy5.ToString("0");
+                res.F = Proj(boy4, Math.Cos(a3r)).ToString("0");
+            }
+            else if (alfa1 == 90 && alfa2 > 90 && alfa2 < 180 && alfa3 == 90 && alfa4 == 180)
+            {
+                res.Type = "59";
+                res.A = boy5.ToString("0"); res.B = boy4.ToString("0"); res.C = boy3.ToString("0");
+                res.D = boy2.ToString("0"); res.E = boy1.ToString("0");
+                res.F = Proj(boy2, Math.Cos(a2r)).ToString("0");
+            }
+            else if (alfa1 == 180 && alfa2 == 90 && alfa3 < 90 && alfa4 == 0)
+            {
+                res.Type = "62";
+                res.A = boy1.ToString("0"); res.B = boy2.ToString("0"); res.C = boy3.ToString("0");
+                res.D = boy4.ToString("0"); res.E = boy5.ToString("0");
+                res.F = Proj(boy4, Math.Sin(a3r)).ToString("0");
+            }
+            else if (alfa1 == 180 && alfa2 > 90 && alfa3 == 90 && alfa4 == 0)
+            {
+                res.Type = "62";
+                res.A = boy5.ToString("0"); res.B = boy4.ToString("0"); res.C = boy3.ToString("0");
+                res.D = boy2.ToString("0"); res.E = boy1.ToString("0");
+                res.F = Proj(boy2, Math.Sin(AngleRad(pp[1], pp[2]))).ToString("0"); // angle(PP2,PP3)
             }
             else
             {
-                res.Type = "99"; // Не распознано
+                res.Type = "99";
             }
         }
 
@@ -834,9 +1053,9 @@ namespace PoseEdit2026
         private static void Recognize7Points(List<Point3d> pts, RebarResult res)
         {
             // ШАГ 1: ПРОВЕРЯЕМ НАПРАВЛЕНИЕ И ПРИ НЕОБХОДИМОСТИ РАЗВОРАЧИВАЕМ
-            // Вычисляем углы первого и последнего сегментов
-            double alfa1_check = (int)(0.5 + (Math.Atan2(pts[1].Y - pts[0].Y, pts[1].X - pts[0].X) * 180.0 / Math.PI));
-            double alfa2_check = (int)(0.5 + (Math.Atan2(pts[6].Y - pts[5].Y, pts[6].X - pts[5].X) * 180.0 / Math.PI));
+            // Вычисляем углы первого и последнего сегментов (angle P1 P2) и (angle P6 P7)
+            double alfa1_check = AngleDeg(AngleRad(pts[0], pts[1]));
+            double alfa2_check = AngleDeg(AngleRad(pts[5], pts[6]));
 
             // Если углы не совпадают - разворачиваем список точек
             if (alfa1_check != alfa2_check)
@@ -889,20 +1108,36 @@ namespace PoseEdit2026
             double boy5 = Round(_scale * pp[4].DistanceTo(pp[5]));
             double boy6 = Round(_scale * pp[5].DistanceTo(pp[6]));
 
-            // ШАГ 5: ЗАПИСЫВАЕМ ДЛИНЫ
-            res.A = boy1.ToString("0");
-            res.B = boy2.ToString("0");
-            res.C = boy3.ToString("0");
-            res.D = boy6.ToString("0");
-            res.E = boy5.ToString("0");
-            res.F = "0";
+            // ШАГ 5: УГЛЫ (в стиле AutoLISP, диапазон 0..360°)
+            double a2r = AngleRad(pp[2], pp[1]); // angle(PP3,PP2)
+            double alfa1 = AngleDeg(AngleRad(pp[1], pp[0])); // angle(PP2,PP1)
+            double alfa2 = AngleDeg(a2r);
+            double alfa3 = AngleDeg(AngleRad(pp[3], pp[4])); // angle(PP4,PP5)
+            double alfa4 = AngleDeg(AngleRad(pp[4], pp[5])); // angle(PP5,PP6)
+            double alfa5 = AngleDeg(AngleRad(pp[5], pp[6])); // angle(PP6,PP7)
+
             res.R = "0";
 
-            // ШАГ 6: УПРОЩЕННАЯ ЛОГИКА ДЛЯ 7 ТОЧЕК
-            // Если второй и четвертый сегменты примерно равны - это тип 49
-            if (Math.Abs(boy2 - boy4) < 0.1)
+            // ШАГ 6: ПОЛНЫЙ ПОРТ ВЕТВЛЕНИЯ ИЗ Lisp donati_tani_6 (POSEDIT.LSP, ~строки 1497-1613)
+            bool mainCond = alfa1 == 180 && alfa2 > 90 && alfa2 < 180 && alfa3 < 90 && alfa4 == 0
+                            && alfa5 == 270 && Eq(boy2, boy4);
+
+            if (mainCond)
             {
-                res.Type = "49";
+                // (fix (distance PP6 PP7)) == (fix (* (distance PP3 PP2) (Sin (angle PP3 PP2))))
+                double lhs = Math.Floor(pp[5].DistanceTo(pp[6]));
+                double rhs = Math.Floor(pp[2].DistanceTo(pp[1]) * Math.Sin(a2r));
+
+                if (Math.Abs(lhs - rhs) < 0.5)
+                {
+                    Set(res, "49", boy1, boy2, boy3, boy6, boy5);
+                    res.F = "0";
+                }
+                else
+                {
+                    Set(res, "65", boy1, boy2, boy3, boy6, boy5);
+                    res.F = Proj(boy2, Math.Sin(a2r)).ToString("0");
+                }
             }
             else
             {
@@ -967,20 +1202,25 @@ namespace PoseEdit2026
             double boy6 = Round(_scale * pp[5].DistanceTo(pp[6]));
             double boy7 = Round(_scale * pp[6].DistanceTo(pp[7]));
 
-            // ШАГ 4: ЗАПИСЫВАЕМ ДЛИНЫ
-            res.A = boy2.ToString("0");
-            res.B = boy3.ToString("0");
-            res.C = boy4.ToString("0");
-            res.D = boy1.ToString("0");
-            res.E = boy6.ToString("0");
-            res.F = "0";
+            // ШАГ 4: УГЛЫ (в стиле AutoLISP, диапазон 0..360°)
+            double alfa1 = AngleDeg(AngleRad(pp[1], pp[0])); // angle(PP2,PP1)
+            double alfa2 = AngleDeg(AngleRad(pp[2], pp[1])); // angle(PP3,PP2)
+            double alfa3 = AngleDeg(AngleRad(pp[3], pp[2])); // angle(PP4,PP3)
+            double alfa4 = AngleDeg(AngleRad(pp[4], pp[5])); // angle(PP5,PP6)
+            double alfa5 = AngleDeg(AngleRad(pp[5], pp[6])); // angle(PP6,PP7)
+            double alfa6 = AngleDeg(AngleRad(pp[6], pp[7])); // angle(PP7,PP8)
+
             res.R = "0";
 
-            // ШАГ 5: УПРОЩЕННАЯ ЛОГИКА ДЛЯ 8 ТОЧЕК
-            // Если первый и седьмой сегменты равны, и третий и пятый равны - это тип 48
-            if (Math.Abs(boy1 - boy7) < 0.1 && Math.Abs(boy3 - boy5) < 0.1)
+            // ШАГ 5: ПОЛНЫЙ ПОРТ ВЕТВЛЕНИЯ ИЗ Lisp donati_tani_7 (POSEDIT.LSP, ~строки 1616-1714)
+            double sin34 = Math.Abs(Math.Sin(AngleRad(pp[2], pp[3]))); // |Sin(angle PP3 PP4)|
+            bool distOk = Math.Abs(Math.Floor(pp[0].DistanceTo(pp[1])) - Math.Floor(pp[2].DistanceTo(pp[3]) * sin34)) <= 1;
+
+            if (alfa1 == 270 && alfa2 == 180 && alfa3 > 90 && alfa3 < 180 && alfa4 < 90 && alfa5 == 0 && alfa6 == 270
+                && Eq(boy1, boy7) && Eq(boy3, boy5) && distOk)
             {
-                res.Type = "48";
+                Set(res, "48", boy2, boy3, boy4, boy1, boy6);
+                res.F = "0";
             }
             else
             {
