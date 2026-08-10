@@ -20,31 +20,46 @@ There are no automated tests.
 
 ## AutoCAD commands exposed by this plugin
 
-| Command | Method | Purpose |
-|---------|--------|---------|
-| `EEN` | `EditPoseCommand` | Main editor — select or insert an `RL-POS`/`RL-POS2` block, open WPF dialog to edit attributes |
-| `POZVER` | — | Assign position numbers to selected `RL-POS` blocks |
-| `POZCLAYER` | — | Move selected `RL-POS*` blocks to layer `ren.mtr.tb` |
-| `ADET` | — | Change quantity (adet) in a TB block |
-| `ADET2` | — | Change quantity multiplier (adet carpi) in a TB block |
-| `CAP` | — | Change diameter in TB (sets TIK=1) |
-| `ARALIK` | — | Change spacing in TB and ARALIK attribute |
-| `GRUP` | — | Change GC (group multiplier) |
-| `DEGIS` | — | Mass-replace attribute values across blocks |
-| `TDDK` | — | Copy attributes from a reference block to selected blocks |
-| `TDDB` | — | Auto-fill BOY by summing segments A–F |
-| `TDDH` | — | Output error.txt content as model text |
-| `TDD1/2/3` | — | Rearrange TB/BOY/NOT by scheme 1, 2, or 3 |
-| `PZG` | — | Sync RL-POS attributes (ATTSYNC) |
-| `77` | — | Create a linked callout block RL-POS2 with fields |
-| `77B` | — | Find ACAD_FIELD sources and zoom to them |
-| `PZREDEF` | — | Redefine PZ_* blocks from a type list |
-| `DIEZ` | — | Mark blocks containing `#` in attributes with arrows |
-| `TDDU` | — | Apply reference block data to other blocks with same POZ |
-| `PPP` | — | Draw arrows from found positions to a point |
-| `PPP2` | — | Find positions, zoom, interactive review/delete |
-| `POZSIL` | — | Clear POZ attribute on selected blocks (sets to 0) |
-| `CREATELAYERS` / `CL` | `LayerCreator` | Create 41 standard layers with prefix, color, linetype, weight |
+**Naming convention:** the old AutoLISP files (`Temp/POSEDIT.LSP`, `Temp/Command/*.lsp`) can still be
+loaded in the same AutoCAD session as this plugin. To avoid command-name collisions, every C# port of
+a LISP command gets an `N` suffix (the same convention already used for `EE` → `EEN`). E.g. LISP
+`adet` → C# `ADETN`. The old LISP command keeps working under its original name if still loaded.
+
+| Command | Method | Purpose | Old LISP name |
+|---------|--------|---------|----------------|
+| `EEN` | `Commands.EditPoseCommand` | Main editor — select or insert an `RL-POS`/`RL-POS2` block, open WPF dialog to edit attributes | `ee` |
+| `RQT` | `QuantityTableGenerator.CreateQuantityTables` | Build the rebar quantity/specification table | `RQT` |
+| `CREATELAYERS` / `CL` | `LayerCreator.CreateLayersCommand` | Create 41 standard layers with prefix, color, linetype, weight | — |
+| `ADETN` | `LegacyCommands.ChangeAdetCommand` | Change quantity (adet) in TB, keep multiplier/cap/aralik | `adet` |
+| `ADET2N` | `LegacyCommands.ChangeAdetCarpiCommand` | Change quantity multiplier ("3x" prefix) in TB | `adet2` |
+| `CAPN` | `LegacyCommands.ChangeCapCommand` | Change diameter in TB (sets TIK=1) | `cap` |
+| `ARALIKN` | `LegacyCommands.ChangeAralikCommand` | Change spacing in TB and ARALIK attribute, auto-recalculates adet | `aralik` |
+| `GRUPN` | `LegacyCommands.ChangeGrupCommand` | Change GC (group multiplier) | `grup` |
+| `DEGISN` | `LegacyCommands.ChangeAttributeMassCommand` | Mass find/replace one field's value across selected blocks | `degis` |
+| `TDDKN` | `LegacyCommands.CopyAttributesCommand` | Copy all matching-tag attributes from a reference block to target blocks | `tddk` |
+| `TDDUN` | `LegacyCommands.ApplyReferenceToMatchingPozCommand` | Apply reference position's data to all blocks sharing the same POZ | `tddu` |
+| `TDD1N`/`TDD2N`/`TDD3N` | `LegacyCommands.RearrangeByScheme` | Force TB/BOY/NOT into layout scheme 1, 2, or 3 | `tdd1`/`tdd2`/`tdd3` |
+| `TDDHN` | `LegacyCommands.PrintErrorLogCommand` | Print RQT's `error.txt` validation log into the drawing as text | `tddh` |
+| `DIEZN` | `LegacyCommands.MarkHashPositionsCommand` | Mark blocks containing `#` in attributes with arrows | `diez` |
+| `PPPN` | `LegacyCommands.DrawArrowsToPozCommand` | Draw arrows from positions matching a POZ to a point | `ppp` |
+| `PPP2N` | `LegacyCommands.FindAndReviewPozCommand` | Find positions by POZ, zoom to each, interactive review/delete | `ppp2` |
+| `POZVERN` | `LegacyCommands.AutoNumberPositionsCommand` | Auto-assign POZ numbers, grouping identical-geometry positions | `pozver` |
+| `77N` | `LegacyCommands.CreateLinkedCalloutCommand` | Create a linked RL-POS2 callout block with ACAD_FIELD references | `77` |
+| `PZGN` | `LegacyCommands.SyncBlockDefinitionCommand` | Redefine RL-POS from the embedded template and ATTSYNC all instances (batch op — save first) | `pzg` |
+
+### Not ported
+
+| Old LISP command | Why not ported |
+|---|---|
+| `77b` | Walks undocumented internal FIELD-object DXF structure (dictionary group codes 360/331) that can't be verified without a real AutoCAD session — porting blind risked shipping a silently-broken command. Old LISP `77b` still works if loaded. |
+| `tddb` | Needs a `PZ_TUM.txt` bend-length coefficient table (per BS8666 shape type) that does not exist anywhere in this repo or in `Temp/`. Fabricating structural bend-allowance coefficients isn't something to guess at. |
+| `pzredef` | Same missing `PZ_TUM.txt`, plus a whole family of per-type `PZ_<tip>.dwg` block files that also don't exist in the repo. |
+| `pozsil` (clear POZ, set to 0) | No `(defun c:pozsil ...)` (or similarly-named function) found anywhere in `Temp/` — only a routine `att_field_sil` (unrelated: removes an ACAD_FIELD) exists. Provide the source if this should still be ported. |
+| `pozclayer` (move `RL-POS*` to layer `ren.mtr.tb`) | Not requested in the final command list for this migration pass; trivial one-liner (`c:pozclayer` in `QUANTITY2.LSP`) if wanted later. |
+
+If any missing coefficient/template files turn up later, `TDDB`/`PZREDEF` can be ported the same way as
+everything else here — see `Temp/Command/QUANTITY2.LSP` (`b_h`, `PZ_TUM_coz`) and
+`Temp/Command/POSREDEF.LSP`.
 
 ## Architecture
 
@@ -62,7 +77,11 @@ There are no automated tests.
 
 **`LayerCreator.cs`** — `CREATELAYERS`/`CL` commands. Creates 41 standard layers.
 
-**`QuantityTableGenerator.cs`** — `RQT` command. Aggregates all rebar position blocks and generates an AutoCAD specification table.
+**`QuantityTableGenerator.cs`** — `RQT` command. Aggregates all rebar position blocks and generates an AutoCAD specification table. Also exposes `GetClientPath`/`GetUnits`/`GetScale`/`ParseBoyInt` as `internal` for reuse by `LegacyCommands.cs`.
+
+**`PozHelper.cs`** — Shared engine for the `*N` legacy-command ports: TB-string parsing (`GetAdetCarpi`/`GetAdet`/`GetCap`/`GetAralik`), `RepositionShapeText` (auto-snaps BOY/NOT next to TB after an edit — port of AutoLISP `poz_sekil_topla`), and low-level attribute-position helpers (`MoveAttrTo`, `GetBlockGeometry`).
+
+**`LegacyCommands.cs`** — All the `*N`-suffixed command ports listed in the command table below (`ADETN`, `CAPN`, `DEGISN`, `TDDUN`, `POZVERN`, `PZGN`, etc.), translated from `Temp/Command/QUANTITY2.LSP` and related files.
 
 ### Patterns
 
