@@ -12,7 +12,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(dotnet nuget *)",
-      "Bash(dotnet package *)"
+      "Bash(dotnet package *)",
+      "Bash(git commit *)"
     ]
   }
 }

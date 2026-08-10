@@ -27,6 +27,7 @@ using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 
 namespace PoseEdit2026
 {
@@ -545,6 +546,145 @@ namespace PoseEdit2026
             }
 
             ed.WriteMessage($"\n{changed} poz guncellendi.");
+        }
+
+        // ====================================================================================
+        // КОМАНДЫ: TDD1N / TDD2N / TDD3N (было "tdd1"/"tdd2"/"tdd3" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Принудительно переставляет TB/BOY/NOT выбранных блоков RL-POS/RL-POS2
+        // по одной из трёх жёстких схем компоновки (в отличие от RepositionShapeText/
+        // poz_sekil_topla, здесь нет проверки "радиуса притяжения" - позиция ставится всегда).
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:tdd1/2/3 (/) ...) — QUANTITY2.LSP, строки ~210-289
+        //
+        // ПРИМЕЧАНИЕ: оригинал перед перестановкой отражает ("_mirror") блоки с отрицательным
+        // масштабом (зеркальная вставка), чтобы текст не оказался "задом наперёд". Эта версия
+        // такие блоки пропускает и предупреждает пользователя - безопаснее, чем воспроизводить
+        // вызов команды MIRROR через межпроцессный интерфейс без возможности проверить его в AutoCAD.
+        [CommandMethod("TDD1N")]
+        public static void RearrangeScheme1Command() => RearrangeByScheme(1);
+
+        [CommandMethod("TDD2N")]
+        public static void RearrangeScheme2Command() => RearrangeByScheme(2);
+
+        [CommandMethod("TDD3N")]
+        public static void RearrangeScheme3Command() => RearrangeByScheme(3);
+
+        private static void RearrangeByScheme(int scheme)
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            TypedValue[] filterList =
+            [
+                new TypedValue((int)DxfCode.Start, "INSERT"),
+                new TypedValue(-4, "<OR"),
+                new TypedValue((int)DxfCode.BlockName, "RL-POS"),
+                new TypedValue((int)DxfCode.BlockName, "RL-POS2"),
+                new TypedValue(-4, "OR>")
+            ];
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nPozisyonlari degisecek attributeleri seciniz: "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, new SelectionFilter(filterList));
+            if (selRes.Status != PromptStatus.OK) return;
+
+            int skipped = 0;
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                var (insBase, insAng, insScale) = PozHelper.GetBlockGeometry(id);
+                if (insScale < 0) { skipped++; continue; }
+
+                Point3d p11, p21, p31;
+                switch (scheme)
+                {
+                    case 1:
+                        p11 = PozHelper.PolarPoint(insBase, insAng, Math.Abs(insScale) * 45.0);
+                        p11 = PozHelper.PolarPoint(p11, insAng + 0.5 * Math.PI, Math.Abs(insScale) * 10.0);
+                        p21 = PozHelper.PolarPoint(p11, insAng + 1.5 * Math.PI, 45.0 * insScale);
+                        p31 = PozHelper.PolarPoint(p21, insAng + 1.5 * Math.PI, 45.0 * insScale);
+                        break;
+                    case 2:
+                        p11 = PozHelper.PolarPoint(insBase, insAng + 1.5 * Math.PI, 45.0 * insScale);
+                        p11 = PozHelper.PolarPoint(p11, insAng + Math.PI, 30.0 * insScale);
+                        p21 = PozHelper.PolarPoint(p11, insAng + 1.5 * Math.PI, 45.0 * insScale);
+                        p31 = PozHelper.PolarPoint(p21, insAng + 1.5 * Math.PI, 45.0 * insScale);
+                        break;
+                    default: // 3
+                        p11 = PozHelper.PolarPoint(insBase, insAng, Math.Abs(insScale) * 45.0);
+                        p11 = PozHelper.PolarPoint(p11, insAng + 0.5 * Math.PI, Math.Abs(insScale) * 10.0);
+                        p21 = PozHelper.PolarPoint(p11, insAng + 0.5 * Math.PI, 45.0 * insScale);
+                        p31 = PozHelper.PolarPoint(p21, insAng + 0.5 * Math.PI, 45.0 * insScale);
+                        break;
+                }
+
+                PozHelper.MoveAttrTo(id, "TB", p11);
+                PozHelper.MoveAttrTo(id, "BOY", p21);
+                PozHelper.MoveAttrTo(id, "NOT", p31);
+            }
+
+            if (skipped > 0)
+                ed.WriteMessage($"\n{skipped} blok atlandi (negatif olcek/ayna - once elle duzeltin).");
+        }
+
+        // ====================================================================================
+        // КОМАНДА: TDDHN (было "tddh" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Выводит содержимое error.txt (файл ошибок, который создаёт RQT при
+        // проверке метража) в чертёж построчно как текстовые примитивы, начиная с указанной
+        // точки и опускаясь вниз.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:tddh (/ pn1) ...) — QUANTITY2.LSP, строки ~1754-1769
+        [CommandMethod("TDDHN")]
+        public static void PrintErrorLogCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            string errorFile = System.IO.Path.Combine(QuantityTableGenerator.GetClientPath(), "error.txt");
+            if (!System.IO.File.Exists(errorFile))
+            {
+                ed.WriteMessage("\nerror.txt bulunamadi. Once RQT calistirin.");
+                return;
+            }
+
+            double birim = QuantityTableGenerator.GetUnits();
+            double olcek = QuantityTableGenerator.GetScale();
+            double yuk = 0.0020 * olcek * birim;
+            double kacma = 0.0010 * olcek * birim;
+
+            PromptPointOptions ptOpts = new PromptPointOptions(
+                "\nMetraj hata dosyasini yazdirmak istediginiz noktayi gosteriniz: ");
+            PromptPointResult ptRes = ed.GetPoint(ptOpts);
+            if (ptRes.Status != PromptStatus.OK) return;
+
+            string[] lines = System.IO.File.ReadAllLines(errorFile);
+            Point3d pn1 = ptRes.Value;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                BlockTableRecord ms = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+                foreach (string line in lines)
+                {
+                    pn1 = PozHelper.PolarPoint(pn1, 1.5 * Math.PI, yuk + 2.5 * kacma);
+                    if (string.IsNullOrEmpty(line)) continue;
+
+                    DBText txt = new DBText
+                    {
+                        Position = pn1,
+                        Height = yuk,
+                        TextString = line
+                    };
+                    ms.AppendEntity(txt);
+                    tr.AddNewlyCreatedDBObject(txt, true);
+                }
+
+                tr.Commit();
+            }
         }
 
         private static string ReadLine(Editor ed, string prompt)

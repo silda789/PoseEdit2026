@@ -181,6 +181,44 @@ namespace PoseEdit2026
             }
         }
 
+        // ====================================================================================
+        // ФУНКЦИЯ: MoveAttrTo (публичная обёртка над MoveAttr для прямого позиционирования)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Принудительно ставит указанный атрибут (по тегу) блока в заданную точку.
+        // Используется командами TDD1N/TDD2N/TDD3N, которые (в отличие от RepositionShapeText)
+        // не проверяют "радиус притяжения" - переставляют текст безусловно по жёсткой схеме.
+        public static void MoveAttrTo(ObjectId blockId, string tag, Point3d newPosition)
+        {
+            if (blockId.IsNull) return;
+            using (Transaction tr = blockId.Database.TransactionManager.StartTransaction())
+            {
+                BlockReference blkRef = tr.GetObject(blockId, OpenMode.ForWrite) as BlockReference;
+                if (blkRef == null) { tr.Commit(); return; }
+
+                AttributeReference attr = FindAttr(tr, blkRef, tag);
+                if (attr != null) MoveAttr(attr, newPosition);
+
+                tr.Commit();
+            }
+        }
+
+        // Публичная обёртка для polar() - используется командами TDD1N/TDD2N/TDD3N
+        public static Point3d PolarPoint(Point3d basePt, double angle, double distance) => Polar(basePt, angle, distance);
+
+        // Публичный доступ к базовой геометрии блока (аналог entget: assoc 10/50/41)
+        public static (Point3d Position, double Rotation, double ScaleX) GetBlockGeometry(ObjectId blockId)
+        {
+            using (Transaction tr = blockId.Database.TransactionManager.StartTransaction())
+            {
+                BlockReference blkRef = tr.GetObject(blockId, OpenMode.ForRead) as BlockReference;
+                var result = blkRef != null
+                    ? (blkRef.Position, blkRef.Rotation, blkRef.ScaleFactors.X)
+                    : (Point3d.Origin, 0.0, 1.0);
+                tr.Commit();
+                return result;
+            }
+        }
+
         private static AttributeReference FindAttr(Transaction tr, BlockReference blkRef, string tag)
         {
             foreach (ObjectId attId in blkRef.AttributeCollection)

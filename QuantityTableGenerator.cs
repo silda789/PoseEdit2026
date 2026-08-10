@@ -418,7 +418,7 @@ namespace PoseEdit2026
         /// В LISP это глобальная переменная, здесь мы используем путь к папке с программой
         /// Сначала проверяем папку Temp (для разработки), потом Standard рядом с DLL
         /// </summary>
-        private static string GetClientPath()
+        internal static string GetClientPath()
         {
             // 1. Проверяем папку Temp рядом с DLL (для разработки и тестирования)
             string assemblyDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
@@ -488,7 +488,7 @@ namespace PoseEdit2026
         /// <summary>
         /// Читает единицы измерения из AppSettings (приоритет) или из файла UNIT.TXT
         /// </summary>
-        private static double GetUnits()
+        internal static double GetUnits()
         {
             // Сначала проверяем настройки из окна (AppSettings)
             if (AppSettings.DrawingUnit > 0)
@@ -529,7 +529,7 @@ namespace PoseEdit2026
         /// <summary>
         /// Читает масштаб чертежа из AppSettings (приоритет) или из файла UNIT.TXT
         /// </summary>
-        private static double GetScale()
+        internal static double GetScale()
         {
             // Сначала проверяем настройки из окна (AppSettings)
             if (AppSettings.SheetScale > 0)
