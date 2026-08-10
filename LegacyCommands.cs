@@ -23,6 +23,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -684,6 +685,534 @@ namespace PoseEdit2026
                 }
 
                 tr.Commit();
+            }
+        }
+
+        // ====================================================================================
+        // КОМАНДА: DIEZN (было "diez" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Находит все блоки RL-POS/RL-POS2 во всём чертеже, у которых POZ, TB
+        // или размеры A-F/R содержат символ "#" (признак незавершённой/проблемной позиции),
+        // и рисует от каждой стрелку к точке, указанной пользователем.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:diez (/) ...) — Temp/Command/DIEZ.LSP
+        [CommandMethod("DIEZN")]
+        public static void MarkHashPositionsCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            double hk = 1000.0 * db.Dimscale;
+
+            PromptSelectionResult selRes = ed.SelectAll(RlPosOrPos2Filter());
+            if (selRes.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nCizimde RL-POS/RL-POS2 blogu bulunamadi.");
+                return;
+            }
+
+            var hashIds = new List<ObjectId>();
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                if (ContainsHash(BlockHelper.GetAttributes(id))) hashIds.Add(id);
+            }
+
+            if (hashIds.Count == 0)
+            {
+                ed.WriteMessage("\nDiez isaretli bir poz bulunmuyor...");
+                return;
+            }
+
+            PromptPointOptions ptOpts = new PromptPointOptions(
+                $"\n{hashIds.Count}.Adet eleman bulundu. Bulunan pozlara simdi isaretleyeceginiz noktadan oklar cizilecek. Noktayi gosteriniz: ");
+            PromptPointResult ptRes = ed.GetPoint(ptOpts);
+            if (ptRes.Status != PromptStatus.OK) return;
+            Point3d pt3 = ptRes.Value;
+
+            DrawArrowsToPoint(db, hashIds, pt3, hk);
+        }
+
+        // Аналог (strcat POZ TB A B C D E F R) содержит "#"
+        private static bool ContainsHash(Dictionary<string, string> attrs)
+        {
+            string[] tags = ["POZ", "TB", "A", "B", "C", "D", "E", "F", "R"];
+            foreach (string tag in tags)
+                if (attrs.TryGetValue(tag, out string v) && v != null && v.Contains('#'))
+                    return true;
+            return false;
+        }
+
+        private static SelectionFilter RlPosOrPos2Filter()
+        {
+            TypedValue[] filterList =
+            [
+                new TypedValue((int)DxfCode.Start, "INSERT"),
+                new TypedValue(-4, "<OR"),
+                new TypedValue((int)DxfCode.BlockName, "RL-POS"),
+                new TypedValue((int)DxfCode.BlockName, "RL-POS2"),
+                new TypedValue(-4, "OR>")
+            ];
+            return new SelectionFilter(filterList);
+        }
+
+        // Рисует "стрелку" (полилиния с переменной шириной) от каждой позиции к общей точке.
+        // Аналог (command "pline" pt1 "w" 0 (* hk 0.080) pt2 "w" 0 0 pt3 "") на слое "ren.arrow"
+        private static void DrawArrowsToPoint(Database db, List<ObjectId> ids, Point3d target, double hk)
+        {
+            int oldOsmode = (int)Application.GetSystemVariable("OSMODE");
+            Application.SetSystemVariable("OSMODE", 0);
+            try
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    EnsureLayer(tr, db, "ren.arrow");
+                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    BlockTableRecord ms = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+                    foreach (ObjectId id in ids)
+                    {
+                        BlockReference blkRef = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                        if (blkRef == null) continue;
+                        Point3d pt1 = blkRef.Position;
+                        double aci = Math.Atan2(target.Y - pt1.Y, target.X - pt1.X);
+                        Point3d pt2 = PozHelper.PolarPoint(pt1, aci, hk * 0.240);
+
+                        Polyline pl = new Polyline();
+                        pl.AddVertexAt(0, new Point2d(pt1.X, pt1.Y), 0, 0, hk * 0.080);
+                        pl.AddVertexAt(1, new Point2d(pt2.X, pt2.Y), 0, 0, 0);
+                        pl.AddVertexAt(2, new Point2d(target.X, target.Y), 0, 0, 0);
+                        pl.Layer = "ren.arrow";
+
+                        ms.AppendEntity(pl);
+                        tr.AddNewlyCreatedDBObject(pl, true);
+                    }
+
+                    tr.Commit();
+                }
+            }
+            finally
+            {
+                Application.SetSystemVariable("OSMODE", oldOsmode);
+            }
+        }
+
+        private static void EnsureLayer(Transaction tr, Database db, string layerName)
+        {
+            LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+            if (lt.Has(layerName)) return;
+            lt.UpgradeOpen();
+            LayerTableRecord ltr = new LayerTableRecord { Name = layerName };
+            lt.Add(ltr);
+            tr.AddNewlyCreatedDBObject(ltr, true);
+        }
+
+        // ====================================================================================
+        // КОМАНДА: PPPN (было "ppp" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Из указанной вручную выборки блоков находит все с заданным номером POZ
+        // и рисует от каждого стрелку к общей точке.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:ppp (/) ...) — QUANTITY2.LSP, строки ~699-728
+        [CommandMethod("PPPN")]
+        public static void DrawArrowsToPozCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            double hk = 0.05 * QuantityTableGenerator.GetScale() * QuantityTableGenerator.GetUnits();
+
+            string pozNo = ReadLine(ed, "\nPoz no girin: ");
+            if (string.IsNullOrEmpty(pozNo)) return;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nAranacak pozlari seciniz: "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosOrPos2Filter());
+            if (selRes.Status != PromptStatus.OK) return;
+
+            PromptPointOptions ptOpts = new PromptPointOptions(
+                "\nBulunan pozlara simdi isaretleyeceginiz noktadan oklar cizilecek. Noktayi gosteriniz: ");
+            PromptPointResult ptRes = ed.GetPoint(ptOpts);
+            if (ptRes.Status != PromptStatus.OK) return;
+
+            var matchIds = new List<ObjectId>();
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                var attrs = BlockHelper.GetAttributes(id);
+                if (attrs.TryGetValue("POZ", out string p) && p == pozNo) matchIds.Add(id);
+            }
+
+            DrawArrowsToPoint(db, matchIds, ptRes.Value, hk);
+            ed.WriteMessage($"\n{matchIds.Count} poz isaretlendi.");
+        }
+
+        // ====================================================================================
+        // КОМАНДА: PPP2N (было "ppp2" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Находит все блоки с заданным POZ в выборке, по очереди приближает
+        // (zoom) к каждому и показывает все атрибуты, спрашивая продолжать ли поиск.
+        // Если и искомый, и найденный POZ начинаются с "#" - предлагает удалить элемент.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:ppp2 (/) ...) — QUANTITY2.LSP, строки ~730-780
+        [CommandMethod("PPP2N")]
+        public static void FindAndReviewPozCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            double birim = QuantityTableGenerator.GetUnits();
+
+            string pozNo = ReadLine(ed, "\nPoz no girin: ");
+            if (string.IsNullOrEmpty(pozNo)) return;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nAranacak pozlari seciniz: "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosOrPos2Filter());
+            if (selRes.Status != PromptStatus.OK) return;
+
+            ObjectId[] ids = selRes.Value.GetObjectIds();
+            var matches = new List<ObjectId>();
+            foreach (ObjectId id in ids)
+            {
+                var attrs = BlockHelper.GetAttributes(id);
+                if (attrs.TryGetValue("POZ", out string p) && p == pozNo) matches.Add(id);
+            }
+
+            if (matches.Count == 0)
+            {
+                ed.WriteMessage("\nArama tamamlandi ... ama bisey bulamadik..!");
+                return;
+            }
+
+            bool searchIsHash = pozNo.StartsWith("#", StringComparison.Ordinal);
+            int sira = 0;
+            foreach (ObjectId id in matches)
+            {
+                sira++;
+                var attrs = BlockHelper.GetAttributes(id);
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    BlockReference blkRef = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                    if (blkRef != null)
+                    {
+                        Point3d pt1 = blkRef.Position;
+                        double halfW = 3.0 * birim;
+                        ZoomToPoint(ed, pt1, halfW);
+                    }
+                    tr.Commit();
+                }
+
+                string info = string.Join(" , ", attrs.Select(kv => $"{kv.Key}: {kv.Value}"));
+                string x = ReadLine(ed, $"\nNo:{sira}/{matches.Count} - {info} Aramaya devam edilsin mi?..<E>...");
+                if (string.Equals(x, "h", StringComparison.OrdinalIgnoreCase)) break;
+
+                if (searchIsHash)
+                {
+                    string y = ReadLine(ed, "\nGecerli eleman silinsin mi? ");
+                    if (string.Equals(y, "e", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(y, "E", StringComparison.Ordinal))
+                    {
+                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                        {
+                            Entity ent = tr.GetObject(id, OpenMode.ForWrite) as Entity;
+                            ent?.Erase();
+                            tr.Commit();
+                        }
+                    }
+                }
+            }
+
+            ed.WriteMessage("\nArama tamamlandi ... ");
+        }
+
+        // Аналог (command "zoom" "w" p1 p2) - зумирует на квадрат вокруг точки
+        private static void ZoomToPoint(Editor ed, Point3d center, double halfWidth)
+        {
+            ViewTableRecord view = ed.GetCurrentView();
+            view.CenterPoint = new Point2d(center.X, center.Y);
+            view.Height = halfWidth * 2.0;
+            view.Width = halfWidth * 2.0;
+            ed.SetCurrentView(view);
+        }
+
+        // ====================================================================================
+        // КОМАНДА: POZVERN (было "pozver" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Автоматически присваивает номера POZ выбранным блокам RL-POS: одинаковые
+        // по геометрии (диаметр/тип/BOY/A-F/R) позиции получают один и тот же номер.
+        // Если пользователь ничего не выбрал на первом запросе - переходит в режим "сохранить
+        // уже пронумерованные (TIK=0) позиции", подбирая новым позициям номера уже
+        // существующих идентичных, а остаток нумерует заново начиная со следующего номера.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:pozver (/) ...) — Temp/Command/QUANTITY_COUNT.LSP
+        [CommandMethod("POZVERN")]
+        public static void AutoNumberPositionsCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nOtomatik pozlandirilacak pozlari sec (Enter = TIK=0 pozlari koru): "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
+
+            List<ObjectId> eset;
+            int sonPoz = 0;
+
+            if (selRes.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nDaha oncden pozlandirilmis pozlar kalacak, edit yapilmis pozlar pozlandirilacak. Simdi tekrar sec...");
+                PromptSelectionResult selAllRes = ed.GetSelection(selOpts, RlPosFilter());
+                if (selAllRes.Status != PromptStatus.OK) return;
+
+                var esetOnce = new List<ObjectId>();
+                eset = new List<ObjectId>();
+                foreach (ObjectId id in selAllRes.Value.GetObjectIds())
+                {
+                    var a = BlockHelper.GetAttributes(id);
+                    string tik = a.TryGetValue("TIK", out string tv) ? tv : "";
+                    if (tik == "0") esetOnce.Add(id); else eset.Add(id);
+                }
+
+                foreach (ObjectId id in esetOnce)
+                {
+                    var a = BlockHelper.GetAttributes(id);
+                    if (int.TryParse(a.TryGetValue("POZ", out string p) ? p : "0", out int pv))
+                        sonPoz = Math.Max(sonPoz, pv);
+                }
+
+                for (int i = eset.Count - 1; i >= 0; i--)
+                {
+                    ShapeKey key = MakeShapeKey(BlockHelper.GetAttributes(eset[i]));
+                    foreach (ObjectId onceId in esetOnce)
+                    {
+                        if (!key.Equals(MakeShapeKey(BlockHelper.GetAttributes(onceId)))) continue;
+
+                        var onceAttrs = BlockHelper.GetAttributes(onceId);
+                        string poz = onceAttrs.TryGetValue("POZ", out string pz) ? pz : "";
+                        BlockHelper.SetAttributes(eset[i], new Dictionary<string, string> { ["POZ"] = poz, ["TIK"] = "0" });
+                        eset.RemoveAt(i);
+                        break;
+                    }
+                    if (eset.Count < 1) break;
+                }
+            }
+            else
+            {
+                eset = new List<ObjectId>(selRes.Value.GetObjectIds());
+            }
+
+            if (eset.Count == 0)
+            {
+                ed.WriteMessage("\nPoz verme islemi tamamlandi... ");
+                return;
+            }
+
+            var uniqueKeys = new List<ShapeKey>();
+            foreach (ObjectId id in eset)
+            {
+                ShapeKey key = MakeShapeKey(BlockHelper.GetAttributes(id));
+                if (!uniqueKeys.Contains(key)) uniqueKeys.Add(key);
+            }
+            uniqueKeys = uniqueKeys
+                .OrderBy(k => int.TryParse(k.Cap, out int c) ? c : 0)
+                .ThenBy(k => QuantityTableGenerator.ParseBoyInt(k.Boy))
+                .ToList();
+
+            foreach (ObjectId id in eset)
+            {
+                ShapeKey key = MakeShapeKey(BlockHelper.GetAttributes(id));
+                int idx = uniqueKeys.IndexOf(key);
+                if (idx < 0) continue;
+                int newPoz = sonPoz + idx + 1;
+                BlockHelper.SetAttributes(id, new Dictionary<string, string>
+                {
+                    ["POZ"] = newPoz.ToString(),
+                    ["TIK"] = "0"
+                });
+            }
+
+            ed.Regen();
+            ed.WriteMessage("\nPoz verme islemi tamamlandi... ");
+        }
+
+        // Ключ идентичности геометрии позиции (аналог poz_icin_oku): совпадение этих полей
+        // означает "это одна и та же форма арматуры" для целей автонумерации
+        private readonly struct ShapeKey : IEquatable<ShapeKey>
+        {
+            public readonly string Cap, Tip, Boy, A, B, C, D, E, F, R;
+
+            public ShapeKey(string cap, string tip, string boy, string a, string b, string c, string d, string e, string f, string r)
+            {
+                Cap = cap; Tip = tip; Boy = boy; A = a; B = b; C = c; D = d; E = e; F = f; R = r;
+            }
+
+            public bool Equals(ShapeKey other) =>
+                Cap == other.Cap && Tip == other.Tip && Boy == other.Boy &&
+                A == other.A && B == other.B && C == other.C && D == other.D &&
+                E == other.E && F == other.F && R == other.R;
+
+            public override bool Equals(object obj) => obj is ShapeKey other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = 17;
+                    foreach (string s in new[] { Cap, Tip, Boy, A, B, C, D, E, F, R })
+                        hash = hash * 31 + (s?.GetHashCode() ?? 0);
+                    return hash;
+                }
+            }
+        }
+
+        private static ShapeKey MakeShapeKey(Dictionary<string, string> attrs)
+        {
+            string tb = attrs.TryGetValue("TB", out string tbv) ? tbv : "";
+            string rawCap = PozHelper.GetCap(tb);
+            string cap = int.TryParse(rawCap, out int capN) ? capN.ToString() : rawCap;
+            string Get(string tag) => attrs.TryGetValue(tag, out string v) ? v : "";
+            return new ShapeKey(cap, Get("TIP"), Get("BOY"), Get("A"), Get("B"), Get("C"), Get("D"), Get("E"), Get("F"), Get("R"));
+        }
+
+        // ====================================================================================
+        // КОМАНДА: 77N (было "77" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Создаёт связанный блок RL-POS2 (выноска на сечении), поля которого
+        // ссылаются на POZ/TB/NOT выбранной позиции через ACAD_FIELD - при изменении
+        // исходной позиции текст выноски обновится автоматически (UPDATEFIELD).
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:77 (/ en blk atts att pn id olcu aci p71 text) ...)
+        //                — QUANTITY2.LSP, строки ~898-952
+        [CommandMethod("77N")]
+        public static void CreateLinkedCalloutCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            PromptEntityOptions entOpts = new PromptEntityOptions("\nOkunacak Poz'u sec: ");
+            entOpts.SetRejectMessage("\nBlok secmelisiniz.");
+            entOpts.AddAllowedClass(typeof(BlockReference), false);
+            PromptEntityResult entRes = ed.GetEntity(entOpts);
+            if (entRes.Status != PromptStatus.OK) return;
+
+            double insScale = (QuantityTableGenerator.GetScale() / QuantityTableGenerator.GetUnits()) * 100.0;
+
+            long idPoz = 0, idTb = 0, idNot = 0;
+            double aci = 0;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockReference blkRef = tr.GetObject(entRes.ObjectId, OpenMode.ForRead) as BlockReference;
+                if (blkRef == null) { tr.Commit(); return; }
+
+                foreach (ObjectId attId in blkRef.AttributeCollection)
+                {
+                    AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                    if (attRef == null) continue;
+                    if (string.Equals(attRef.Tag, "POZ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        idPoz = attRef.ObjectId.Handle.Value;
+                        aci = attRef.Rotation;
+                    }
+                    else if (string.Equals(attRef.Tag, "TB", StringComparison.OrdinalIgnoreCase))
+                        idTb = attRef.ObjectId.Handle.Value;
+                    else if (string.Equals(attRef.Tag, "NOT", StringComparison.OrdinalIgnoreCase))
+                        idNot = attRef.ObjectId.Handle.Value;
+                }
+                tr.Commit();
+            }
+
+            if (idPoz == 0 || idTb == 0)
+            {
+                ed.WriteMessage("\nSecilen blokta POZ/TB attribute bulunamadi.");
+                return;
+            }
+
+            ed.WriteMessage($"\nAci: {aci * 180.0 / Math.PI:0}");
+            PromptPointOptions ptOpts = new PromptPointOptions("\nYerlesim Noktasi: ");
+            PromptPointResult ptRes = ed.GetPoint(ptOpts);
+            if (ptRes.Status != PromptStatus.OK) return;
+            Point3d pt1 = ptRes.Value;
+
+            string text1 = $"%<\\AcObjProp Object(%<\\_ObjId {idPoz}>%).TextString>%";
+            string text2 = $"%<\\AcObjProp Object(%<\\_ObjId {idTb}>%).TextString>%";
+            string text3 = idNot != 0 ? $"%<\\AcObjProp Object(%<\\_ObjId {idNot}>%).TextString>%" : "";
+
+            string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "RL-POS2.dwg");
+            try { ExtractEmbeddedResource("PoseEdit2026.Resources.RL-POS2.dwg", tempFile); }
+            catch (System.Exception ex) { ed.WriteMessage($"\nRL-POS2.dwg cikartilamadi: {ex.Message}"); return; }
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                ObjectId btrId;
+                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                if (bt.Has("RL-POS2"))
+                {
+                    btrId = bt["RL-POS2"];
+                }
+                else
+                {
+                    Database sourceDb = new Database(false, true);
+                    sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, null);
+                    btrId = db.Insert("RL-POS2", sourceDb, false);
+                    sourceDb.Dispose();
+                }
+
+                BlockTableRecord ms = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+                BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
+
+                using (BlockReference newRef = new BlockReference(pt1, btrId))
+                {
+                    newRef.ScaleFactors = new Scale3d(insScale, insScale, insScale);
+                    newRef.Rotation = aci;
+                    newRef.Layer = "ren.mtr.Pos";
+                    ms.AppendEntity(newRef);
+                    tr.AddNewlyCreatedDBObject(newRef, true);
+
+                    foreach (ObjectId defId in btr)
+                    {
+                        AttributeDefinition attDef = tr.GetObject(defId, OpenMode.ForRead) as AttributeDefinition;
+                        if (attDef == null || attDef.Constant) continue;
+
+                        using (AttributeReference newAttr = new AttributeReference())
+                        {
+                            newAttr.SetAttributeFromBlock(attDef, newRef.BlockTransform);
+                            string tagUp = attDef.Tag.ToUpperInvariant();
+                            if (tagUp == "POZ") newAttr.TextString = text1;
+                            else if (tagUp == "TB") newAttr.TextString = text2;
+                            else if (tagUp == "NOT") newAttr.TextString = text3;
+                            newRef.AttributeCollection.AppendAttribute(newAttr);
+                            tr.AddNewlyCreatedDBObject(newAttr, true);
+                        }
+                    }
+                }
+
+                tr.Commit();
+            }
+
+            ed.WriteMessage("\n77N: bagli poz olusturuldu (alanlari guncellemek icin gerekirse UPDATEFIELD calistirin).");
+        }
+
+        // Извлекает встроенный DWG-ресурс во временный файл (аналог логики в Commands.cs)
+        private static void ExtractEmbeddedResource(string resourceName, string destPath)
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using (var stream = asm.GetManifestResourceStream(resourceName))
+            {
+                if (stream == null) throw new InvalidOperationException($"Resource not found: {resourceName}");
+                using (var file = System.IO.File.Create(destPath))
+                {
+                    stream.CopyTo(file);
+                }
             }
         }
 

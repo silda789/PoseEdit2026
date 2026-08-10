@@ -394,7 +394,7 @@ namespace PoseEdit2026
             return "";
         }
 
-        private static int ParseBoyInt(string boy)
+        internal static int ParseBoyInt(string boy)
         {
             if (string.IsNullOrEmpty(boy)) return 0;
 
