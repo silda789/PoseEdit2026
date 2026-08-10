@@ -1202,6 +1202,142 @@ namespace PoseEdit2026
             ed.WriteMessage("\n77N: bagli poz olusturuldu (alanlari guncellemek icin gerekirse UPDATEFIELD calistirin).");
         }
 
+        // ====================================================================================
+        // КОМАНДА: PZGN (было "pzg" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Переопределяет определение блока RL-POS из текущего встроенного шаблона
+        // (Resources/RL-POS.dwg) и досинхронизирует все блоки RL-POS в чертеже с новым
+        // набором атрибутов (аналог команды ATTSYNC): добавляет новые атрибуты определения,
+        // удаляет отсутствующие, СОХРАНЯЕТ значения совпадающих тегов. После синхронизации
+        // восстанавливает прежнее расположение TB/BOY/NOT (ATTSYNC иначе сбросил бы их
+        // позицию на дефолтную из определения блока) и пересчитывает раскладку.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:pzg (/) ...) — QUANTITY2.LSP, строки ~72-110
+        //
+        // ВНИМАНИЕ: это операция массового изменения по ВСЕМ блокам RL-POS в чертеже -
+        // сохраните чертёж перед запуском.
+        [CommandMethod("PZGN")]
+        public static void SyncBlockDefinitionCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            string confirm = ReadLine(ed,
+                "\nBu islem cizimdeki TUM RL-POS bloklarini guncel sablonla senkronize edecek. " +
+                "Once cizimi kaydedin. Devam edilsin mi? (Evet/Hayir): ");
+            if (!string.Equals(confirm, "Evet", StringComparison.OrdinalIgnoreCase)) return;
+
+            PromptSelectionResult selRes = ed.SelectAll(RlPosFilter());
+            if (selRes.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nGuncellenecek RL-POS blogu bulunamadi.");
+                return;
+            }
+            ObjectId[] ids = selRes.Value.GetObjectIds();
+
+            var oldPositions = new Dictionary<ObjectId, (Point3d Tb, Point3d Boy, Point3d Not)>();
+            foreach (ObjectId id in ids)
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    BlockReference blkRef = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                    Point3d tb = Point3d.Origin, boy = Point3d.Origin, nott = Point3d.Origin;
+                    if (blkRef != null)
+                    {
+                        foreach (ObjectId attId in blkRef.AttributeCollection)
+                        {
+                            AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                            if (attRef == null) continue;
+                            if (string.Equals(attRef.Tag, "TB", StringComparison.OrdinalIgnoreCase)) tb = attRef.Position;
+                            else if (string.Equals(attRef.Tag, "BOY", StringComparison.OrdinalIgnoreCase)) boy = attRef.Position;
+                            else if (string.Equals(attRef.Tag, "NOT", StringComparison.OrdinalIgnoreCase)) nott = attRef.Position;
+                        }
+                    }
+                    tr.Commit();
+                    oldPositions[id] = (tb, boy, nott);
+                }
+            }
+
+            string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "RL-POS_sync.dwg");
+            try { ExtractEmbeddedResource("PoseEdit2026.Resources.RL-POS.dwg", tempFile); }
+            catch (System.Exception ex) { ed.WriteMessage($"\nRL-POS.dwg cikartilamadi: {ex.Message}"); return; }
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                Database sourceDb = new Database(false, true);
+                sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, null);
+                db.Insert("RL-POS", sourceDb, false);
+                sourceDb.Dispose();
+                tr.Commit();
+            }
+
+            int synced = 0;
+            foreach (ObjectId id in ids)
+            {
+                SyncAttributesToDefinition(db, id);
+
+                var (oldTb, oldBoy, oldNot) = oldPositions[id];
+                PozHelper.MoveAttrTo(id, "TB", oldTb);
+                PozHelper.MoveAttrTo(id, "BOY", oldBoy);
+                PozHelper.MoveAttrTo(id, "NOT", oldNot);
+
+                var attrs = BlockHelper.GetAttributes(id);
+                string tb = attrs.TryGetValue("TB", out string tbv) ? tbv : "";
+                BlockHelper.SetAttributes(id, new Dictionary<string, string> { ["ARALIK"] = PozHelper.GetAralik(tb) });
+
+                PozHelper.RepositionShapeText(id);
+                synced++;
+            }
+
+            ed.WriteMessage($"\n{synced} RL-POS blogu guncel sablonla senkronize edildi.");
+        }
+
+        // Аналог ATTSYNC для одного блока: пересоздаёт атрибуты по актуальному определению,
+        // сохраняя значения тегов, которые совпадают со старыми
+        private static void SyncAttributesToDefinition(Database db, ObjectId blockRefId)
+        {
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockReference blkRef = tr.GetObject(blockRefId, OpenMode.ForWrite) as BlockReference;
+                if (blkRef == null) { tr.Commit(); return; }
+
+                BlockTableRecord btr = tr.GetObject(blkRef.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+
+                var existingValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var oldAttrIds = new List<ObjectId>();
+                foreach (ObjectId attId in blkRef.AttributeCollection)
+                {
+                    AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                    if (attRef == null) continue;
+                    existingValues[attRef.Tag] = attRef.TextString;
+                    oldAttrIds.Add(attId);
+                }
+
+                foreach (ObjectId id in oldAttrIds)
+                {
+                    AttributeReference attRef = tr.GetObject(id, OpenMode.ForWrite) as AttributeReference;
+                    attRef?.Erase();
+                }
+
+                foreach (ObjectId defId in btr)
+                {
+                    AttributeDefinition attDef = tr.GetObject(defId, OpenMode.ForRead) as AttributeDefinition;
+                    if (attDef == null || attDef.Constant) continue;
+
+                    using (AttributeReference newAttr = new AttributeReference())
+                    {
+                        newAttr.SetAttributeFromBlock(attDef, blkRef.BlockTransform);
+                        newAttr.TextString = existingValues.TryGetValue(attDef.Tag, out string oldVal) ? oldVal : attDef.TextString;
+                        blkRef.AttributeCollection.AppendAttribute(newAttr);
+                        tr.AddNewlyCreatedDBObject(newAttr, true);
+                    }
+                }
+
+                tr.Commit();
+            }
+        }
+
         // Извлекает встроенный DWG-ресурс во временный файл (аналог логики в Commands.cs)
         private static void ExtractEmbeddedResource(string resourceName, string destPath)
         {
