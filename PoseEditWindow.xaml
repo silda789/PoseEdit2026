@@ -11,7 +11,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="POSE EDIT 2024-2026 ARS Co."
-        Height="520" Width="960"
+        Height="440" Width="960"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#F0F0F0">
