@@ -1452,6 +1452,10 @@ namespace PoseEdit2026
 
             foreach (ObjectId id in selRes.Value.GetObjectIds())
             {
+                // Если позиция связана с полилинией (кнопка "Determination" в EEN) - подтягиваем
+                // актуальные TIP/A-F/R с чертежа на случай, если полилинию с тех пор изменили.
+                RebarRecognizer.SyncFromLinkedPolyline(id);
+
                 var attrs = BlockHelper.GetAttributes(id);
                 string tip = attrs.TryGetValue("TIP", out string tipVal) ? tipVal : "";
                 string boyStr = PozHelper.ComputeBendLength(

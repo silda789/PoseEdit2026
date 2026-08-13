@@ -67,7 +67,7 @@ outside this repository, and is now embedded at `Resources/PZ_TUM.txt`. The `PZ_
 
 ### Key classes
 
-See skill `poseedit-architecture` for the per-file breakdown of what each core class does (`Commands.cs`, `PoseEditWindow`, `AppSettings.cs`, `BlockHelper.cs`, `RebarRecognizer.cs`, `LayerCreator.cs`, `QuantityTableGenerator.cs`, `PozHelper.cs`, `LegacyCommands.cs`).
+See skill `poseedit-architecture` for the per-file breakdown of what each core class does (`Commands.cs`, `PoseEditWindow`, `AppSettings.cs`, `BlockHelper.cs`, `RebarRecognizer.cs`, `LayerCreator.cs`, `QuantityTableGenerator.cs`, `PozHelper.cs`, `LegacyCommands.cs`, `ExtensionApp.cs`).
 
 ### Patterns
 
@@ -76,4 +76,17 @@ See skill `poseedit-architecture` for the per-file breakdown of what each core c
 - Embedded DWG resources (`RL-POS.dwg`, `RL-POS2.dwg`) are extracted to `%TEMP%` at runtime before insertion via `db.Insert`.
 - Shape images are WPF resources (not embedded), referenced via `pack://application:,,,/` URIs.
 - `#nullable disable` is used at the top of each file — do not remove it.
+
+### Polyline-linked positions ("Determination" auto-sync)
+
+When `EEN`'s "Determination" button recognizes a shape from a polyline, the polyline's handle is
+saved as XDATA on the `RL-POS` block (`RebarRecognizer.SetLinkedPolyline`, app name `POSEDIT_LINK`) —
+survives save/reopen. Two things re-run recognition against that saved link and overwrite
+TIP/A-F/R/BOY from the polyline's *current* geometry, so edits to the polyline (stretch, grip-edit)
+eventually reach the position without reopening `EEN`:
+- `REGEN`/`REGENALL` (any document) — resyncs every linked `RL-POS` block in the drawing. Wired up
+  in `ExtensionApp.cs` (`IExtensionApplication`, subscribes to `Document.CommandEnded` on load).
+- `TDDBN` — resyncs each block it's about to compute a bend length for, before computing.
+`EEN` itself does no special sync-on-open work — it just reads whatever is currently in the block's
+attributes, which REGEN/TDDBN have already kept fresh.
 

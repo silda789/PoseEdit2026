@@ -802,6 +802,11 @@ namespace PoseEdit2026
                     txtE.Text = result.E;
                     txtF.Text = result.F;
                     txtR.Text = result.R;
+
+                    // Запоминаем связь с этой полилинией: если её потом изменят (длину/угол),
+                    // REGEN/REGENALL и TDDBN пересчитают значения этой позиции автоматически.
+                    if (result.Type != "99")
+                        RebarRecognizer.SetLinkedPolyline(_currentBlockId, res.ObjectId);
                 }
             }
             catch (Exception ex)
