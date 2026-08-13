@@ -914,6 +914,11 @@ namespace PoseEdit2026
                     _isLoading = true;
                     LoadDataFromBlock();
                     _isLoading = false;
+
+                    // LoadDataFromBlock ставит cmbShapeNumber.Text, пока _isLoading=true, поэтому
+                    // SelectionChanged (который обновляет картинку) сам себя блокирует своей же
+                    // проверкой _isLoading - обновляем картинку вручную здесь
+                    UpdateShapeImage();
                 }
             }
             catch (Exception ex)
