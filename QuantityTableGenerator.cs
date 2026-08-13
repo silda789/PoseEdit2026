@@ -257,21 +257,26 @@ namespace PoseEdit2026
         {
             List<RebarPositionInfo> result = new List<RebarPositionInfo>();
 
-            for (int i = 0; i < data.Count; i++)
+            int i = 0;
+            while (i < data.Count)
             {
-                if (i < data.Count - 1 &&
-                    data[i].Poz == data[i + 1].Poz &&
-                    data[i].Cap == data[i + 1].Cap &&
-                    data[i].Boy == data[i + 1].Boy)
+                int totalAdet = int.TryParse(data[i].Adet, out int a0) ? a0 : 0;
+
+                // Складываем количество со всеми подряд идущими дубликатами (та же
+                // Poz/Cap/Boy), а не только с одним соседним элементом
+                int j = i + 1;
+                while (j < data.Count &&
+                       data[j].Poz == data[i].Poz &&
+                       data[j].Cap == data[i].Cap &&
+                       data[j].Boy == data[i].Boy)
                 {
-                    // Объединяем количество
-                    int adet1 = int.TryParse(data[i].Adet, out int a1) ? a1 : 0;
-                    int adet2 = int.TryParse(data[i + 1].Adet, out int a2) ? a2 : 0;
-                    data[i].Adet = (adet1 + adet2).ToString();
-                    i++; // Пропускаем следующий элемент
+                    totalAdet += int.TryParse(data[j].Adet, out int aj) ? aj : 0;
+                    j++;
                 }
 
+                data[i].Adet = totalAdet.ToString();
                 result.Add(data[i]);
+                i = j;
             }
 
             return result;
@@ -301,17 +306,23 @@ namespace PoseEdit2026
             // Сортируем по диаметру
             tempList = tempList.OrderBy(x => int.TryParse(x.Cap, out int cap) ? cap : 9999).ToList();
 
-            // Группируем одинаковые диаметры и суммируем длины
+            // Группируем одинаковые диаметры и суммируем длины (складываем весь подряд идущий
+            // "забег" одинаковых диаметров, а не только один соседний элемент)
             List<DiameterInfo> result = new List<DiameterInfo>();
-            for (int i = 0; i < tempList.Count; i++)
+            int i = 0;
+            while (i < tempList.Count)
             {
-                if (i < tempList.Count - 1 && tempList[i].Cap == tempList[i + 1].Cap)
+                double totalLength = tempList[i].TotalLength;
+                int j = i + 1;
+                while (j < tempList.Count && tempList[j].Cap == tempList[i].Cap)
                 {
-                    // Объединяем одинаковые диаметры
-                    tempList[i].TotalLength += tempList[i + 1].TotalLength;
-                    i++; // Пропускаем следующий элемент
+                    totalLength += tempList[j].TotalLength;
+                    j++;
                 }
+
+                tempList[i].TotalLength = totalLength;
                 result.Add(tempList[i]);
+                i = j;
             }
 
             return result;
@@ -408,8 +419,24 @@ namespace PoseEdit2026
         {
             if (string.IsNullOrEmpty(boy)) return 0;
 
-            // Убираем "L=" и другие символы
-            boy = boy.Replace("L=", "").Replace("l=", "").Replace("(", "").Replace(")", "").Replace("~", "").Trim();
+            // Убираем "L=" и скобки (но НЕ "~" - см. ниже)
+            boy = boy.Replace("L=", "").Replace("l=", "").Replace("(", "").Replace(")", "").Trim();
+
+            // Диапазон "мин~макс" (так форматирует PozHelper.ComputeBendLength/TDDBN, когда
+            // размеры A-F заданы диапазоном) - берём среднее, как в LISP boy_oku_isle:
+            // (* 0.5 (+ min max)). ВАЖНО: раньше "~" просто вырезался без замены разделителем,
+            // и "1200~1300" превращалось в "12001300" (12 миллионов мм вместо ~1250).
+            if (boy.Contains('~'))
+            {
+                string[] parts = boy.Split('~');
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), out int minV) &&
+                    int.TryParse(parts[1].Trim(), out int maxV))
+                {
+                    return (int)Math.Round((minV + maxV) / 2.0);
+                }
+                return 0;
+            }
 
             if (int.TryParse(boy, out int result))
             {
