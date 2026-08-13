@@ -24,7 +24,8 @@
       "Read(//c/Users/durum/Documents/**)",
       "Read(//c/Users/durum/Documents/GitHub/**)",
       "Bash(grep -n \"txtDiameter\\\\|GetCap\\\\|\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\\\\|attributes\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\" PoseEditWindow.xaml.cs)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(grep -n \"i++; // Проп\\\\|j++; //\\\\|// Пропускаем\" QuantityTableGenerator.cs)"
     ]
   }
 }
