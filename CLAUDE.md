@@ -47,19 +47,21 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `77N` | `LegacyCommands.CreateLinkedCalloutCommand` | Create a linked RL-POS2 callout block with ACAD_FIELD references | `77` |
 | `PZGN` | `LegacyCommands.SyncBlockDefinitionCommand` | Redefine RL-POS from the embedded template and ATTSYNC all instances (batch op — save first) | `pzg` |
 | `POZCLAYERN` | `LegacyCommands.MoveToRenMtrTbLayerCommand` | Move all RL-POS blocks to layer `ren.mtr.tb`, creating it if missing | `pozclayer` |
+| `TDDBN` | `LegacyCommands.CalculateBendLengthCommand` | Compute rebar length from A-F/R using per-shape-type coefficients (`Resources/PZ_TUM.txt`), write to BOY | `tddb` |
 
 ### Not ported
 
 | Old LISP command | Why not ported |
 |---|---|
-| `77b` | Walks undocumented internal FIELD-object DXF structure (dictionary group codes 360/331) that can't be verified without a real AutoCAD session — porting blind risked shipping a silently-broken command. Old LISP `77b` still works if loaded. |
-| `tddb` | Needs a `PZ_TUM.txt` bend-length coefficient table (per BS8666 shape type) that does not exist anywhere in this repo or in `Temp/`. Fabricating structural bend-allowance coefficients isn't something to guess at. |
-| `pzredef` | Same missing `PZ_TUM.txt`, plus a whole family of per-type `PZ_<tip>.dwg` block files that also don't exist in the repo. |
+| `77b` | Walks undocumented internal FIELD-object DXF structure (dictionary group codes 360/331) that can't be verified without a real AutoCAD session — porting blind risked shipping a silently-broken command. Old LISP `77b` still works if loaded. Deliberately excluded, not just deferred. |
+| `pzredef` | Needs a whole family of per-type `PZ_<tip>.dwg` block template files. These now exist (found alongside `PZ_TUM.txt`, see below) but aren't in this repo yet — porting `pzredef` means embedding ~100 DWG resources, a separate, larger task from `TDDBN`. |
 | `pozsil` (clear POZ, set to 0) | No `(defun c:pozsil ...)` (or similarly-named function) found anywhere in `Temp/` — only a routine `att_field_sil` (unrelated: removes an ACAD_FIELD) exists. Provide the source if this should still be ported. |
 
-If any missing coefficient/template files turn up later, `TDDB`/`PZREDEF` can be ported the same way as
-everything else here — see `Temp/Command/QUANTITY2.LSP` (`b_h`, `PZ_TUM_coz`) and
-`Temp/Command/POSREDEF.LSP`.
+`PZ_TUM.txt` (bend-length coefficients used by `TDDBN`) and the `PZ_<tip>.dwg` templates needed for
+`pzredef` were not in this repo or in `Temp/` — they turned up in a sibling repo,
+`AutoCAD2024Final/MISC_Files/RCP-KJ_metraj_LISP_R2/Ren_LISP_R2/Statik_Standart/RENAISSANCE_SERVER/Standard/`,
+outside this repository. `PZ_TUM.txt` is now embedded at `Resources/PZ_TUM.txt`. If `pzredef` is wanted,
+its DWG templates are at that same source path — see `Temp/Command/POSREDEF.LSP`.
 
 ## Architecture
 

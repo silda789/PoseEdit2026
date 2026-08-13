@@ -112,6 +112,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\RL-POS.dwg" />
     <EmbeddedResource Include="Resources\RL-POS2.dwg" />
+    <EmbeddedResource Include="Resources\PZ_TUM.txt" />
   </ItemGroup>
 
   <!-- AutoCAD 2024: .NET Framework 4.8 -->

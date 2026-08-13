@@ -1400,6 +1400,52 @@ namespace PoseEdit2026
         }
 
         // ====================================================================================
+        // КОМАНДА: TDDBN (было "tddb" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Считает суммарную длину арматуры (с учётом изгибов) по размерам A-F и
+        // радиусу R, записывает результат в атрибут BOY. Позиции с TIP="99" не трогаются
+        // (BOY не перезаписывается), как и в оригинале.
+        // Коэффициенты по типу гиба — см. PozHelper.ComputeBendLength / Resources/PZ_TUM.txt.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:tddb (/) ...) — QUANTITY2.LSP, строки ~876-894
+        [CommandMethod("TDDBN")]
+        public static void CalculateBendLengthCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nOtomatik boy hesabi yapilacak pozlari seciniz (Not: 99 tipi pozlar duzeltilmez): "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
+            if (selRes.Status != PromptStatus.OK) return;
+
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                var attrs = BlockHelper.GetAttributes(id);
+                string tip = attrs.TryGetValue("TIP", out string tipVal) ? tipVal : "";
+                string boyStr = PozHelper.ComputeBendLength(
+                    tip,
+                    attrs.TryGetValue("A", out string a) ? a : "",
+                    attrs.TryGetValue("B", out string b) ? b : "",
+                    attrs.TryGetValue("C", out string c) ? c : "",
+                    attrs.TryGetValue("D", out string d) ? d : "",
+                    attrs.TryGetValue("E", out string e) ? e : "",
+                    attrs.TryGetValue("F", out string f) ? f : "",
+                    attrs.TryGetValue("R", out string r) ? r : "");
+
+                if (tip != "99")
+                {
+                    BlockHelper.SetAttributes(id, new Dictionary<string, string> { ["BOY"] = boyStr });
+                }
+                PozHelper.RepositionShapeText(id);
+            }
+
+            ed.WriteMessage($"\n{selRes.Value.Count} poz guncellendi.");
+        }
+
+        // ====================================================================================
         // КОМАНДА: POZCLAYERN (было "pozclayer" в LISP)
         // ====================================================================================
         // НАЗНАЧЕНИЕ: Переносит все блоки RL-POS на слой "ren.mtr.tb", создавая слой,
