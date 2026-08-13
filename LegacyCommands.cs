@@ -1043,6 +1043,35 @@ namespace PoseEdit2026
             ed.WriteMessage("\nPoz verme islemi tamamlandi... ");
         }
 
+        // ====================================================================================
+        // КОМАНДА: POZSILN (было "pozsil" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Обнуляет номера POZ у выбранных блоков RL-POS (откат номеров,
+        // присвоенных POZVERN). Исходник LISP-функции не найден нигде в Temp/ — команда
+        // написана по описанию задачи, а не портирована построчно из файла.
+        [CommandMethod("POZSILN")]
+        public static void ClearPozCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nPoz numaralari sifirlanacak pozlari seciniz: "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
+            if (selRes.Status != PromptStatus.OK) return;
+
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                BlockHelper.SetAttributes(id, new Dictionary<string, string> { ["POZ"] = "0" });
+            }
+
+            ed.Regen();
+            ed.WriteMessage($"\n{selRes.Value.Count} pozun POZ numarasi sifirlandi.");
+        }
+
         // Ключ идентичности геометрии позиции (аналог poz_icin_oku): совпадение этих полей
         // означает "это одна и та же форма арматуры" для целей автонумерации
         private readonly struct ShapeKey : IEquatable<ShapeKey>

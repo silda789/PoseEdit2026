@@ -48,6 +48,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `PZGN` | `LegacyCommands.SyncBlockDefinitionCommand` | Redefine RL-POS from the embedded template and ATTSYNC all instances (batch op — save first) | `pzg` |
 | `POZCLAYERN` | `LegacyCommands.MoveToRenMtrTbLayerCommand` | Move all RL-POS blocks to layer `ren.mtr.tb`, creating it if missing | `pozclayer` |
 | `TDDBN` | `LegacyCommands.CalculateBendLengthCommand` | Compute rebar length from A-F/R using per-shape-type coefficients (`Resources/PZ_TUM.txt`), write to BOY | `tddb` |
+| `POZSILN` | `LegacyCommands.ClearPozCommand` | Reset POZ to `0` on selected RL-POS blocks (undo of POZVERN's numbering) | `pozsil` |
 
 ### Not ported
 
@@ -55,7 +56,6 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 |---|---|
 | `77b` | Walks undocumented internal FIELD-object DXF structure (dictionary group codes 360/331) that can't be verified without a real AutoCAD session — porting blind risked shipping a silently-broken command. Old LISP `77b` still works if loaded. Deliberately excluded, not just deferred. |
 | `pzredef` | Not a position-editing command — it refreshes standalone `PZ_00`..`PZ_99` block *definitions* from `PZ_<tip>.dwg` template files (+ `ATTSYNC`), for blocks that may exist independently somewhere in a drawing. Nothing in `EEN`/`RQT`/etc. ever inserts these blocks, so it's disconnected from the rest of this plugin's workflow. Deliberately excluded for now, not just deferred. The `.dwg` templates do exist (found alongside `PZ_TUM.txt`, see below) if this is ever wanted. |
-| `pozsil` (clear POZ, set to 0) | No `(defun c:pozsil ...)` (or similarly-named function) found anywhere in `Temp/` — only a routine `att_field_sil` (unrelated: removes an ACAD_FIELD) exists. Provide the source if this should still be ported. |
 
 `PZ_TUM.txt` (bend-length coefficients used by `TDDBN`) was not in this repo or in `Temp/` — it turned up
 in a sibling repo,
