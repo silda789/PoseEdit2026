@@ -23,7 +23,8 @@
       "Bash(cp /tmp/skills.txt /c/Users/durum/AppData/Local/Temp/claude/C--Users-durum-Documents-GitHub-PoseEdit2026/c12b866d-109b-42f4-ba2e-7dc239aa3192/scratchpad/skills.txt)",
       "Read(//c/Users/durum/Documents/**)",
       "Read(//c/Users/durum/Documents/GitHub/**)",
-      "Bash(grep -n \"txtDiameter\\\\|GetCap\\\\|\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\\\\|attributes\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\" PoseEditWindow.xaml.cs)"
+      "Bash(grep -n \"txtDiameter\\\\|GetCap\\\\|\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\\\\|attributes\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\" PoseEditWindow.xaml.cs)",
+      "Bash(python -c ' *)"
     ]
   }
 }
