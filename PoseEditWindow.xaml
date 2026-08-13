@@ -288,7 +288,7 @@
                             <!-- Поля внизу занимают сколько нужно -->
                             </Grid.RowDefinitions>
 
-                            <GroupBox Header="Rebar Shape Preview" Grid.Row="0" Padding="15" ClipToBounds="True">
+                            <GroupBox Header="Rebar Shape Preview" Grid.Row="0" Padding="4" ClipToBounds="True">
                         <!--
                     Улучшенное отображение изображения:
                     - Stretch="Uniform" - сохраняет пропорции, вписывается в контейнер (НЕ обрезает края)
@@ -303,7 +303,7 @@
                            Stretch="Uniform"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="8"
+                           Margin="2"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            RenderOptions.CachingHint="Cache"/>
                             </GroupBox>
