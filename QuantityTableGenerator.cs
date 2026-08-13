@@ -70,9 +70,11 @@ namespace PoseEdit2026
         }
 
         /// <summary>
-        /// Главная команда RQT - создание таблиц спецификации
+        /// Главная команда RQTN (было "RQT" в LISP - переименовано, чтобы не сталкиваться
+        /// с (defun c:RQT ...) из Temp/Command/QUANTITY.LSP, если старый LISP загружен
+        /// в той же сессии AutoCAD, что и этот плагин)
         /// </summary>
-        [CommandMethod("RQT")]
+        [CommandMethod("RQTN")]
         public static void CreateQuantityTables()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;

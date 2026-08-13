@@ -15,7 +15,7 @@ description: Per-file breakdown of what each core class in PoseEdit2026 does (Co
 
 **`LayerCreator.cs`** — `CREATELAYERS`/`CL` commands. Creates 41 standard layers.
 
-**`QuantityTableGenerator.cs`** — `RQT` command. Aggregates all rebar position blocks and generates an AutoCAD specification table. Also exposes `GetClientPath`/`GetUnits`/`GetScale`/`ParseBoyInt` as `internal` for reuse by `LegacyCommands.cs`.
+**`QuantityTableGenerator.cs`** — `RQTN` command. Aggregates all rebar position blocks and generates an AutoCAD specification table. Also exposes `GetClientPath`/`GetUnits`/`GetScale`/`ParseBoyInt` as `internal` for reuse by `LegacyCommands.cs`.
 
 **`PozHelper.cs`** — Shared engine for the `*N` legacy-command ports: TB-string parsing (`GetAdetCarpi`/`GetAdet`/`GetCap`/`GetAralik`), `RepositionShapeText` (auto-snaps BOY/NOT next to TB after an edit — port of AutoLISP `poz_sekil_topla`), and low-level attribute-position helpers (`MoveAttrTo`, `GetBlockGeometry`).
 

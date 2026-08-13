@@ -28,7 +28,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | Command | Method | Purpose | Old LISP name |
 |---------|--------|---------|----------------|
 | `EEN` | `Commands.EditPoseCommand` | Main editor — select or insert an `RL-POS`/`RL-POS2` block, open WPF dialog to edit attributes | `ee` |
-| `RQT` | `QuantityTableGenerator.CreateQuantityTables` | Build the rebar quantity/specification table | `RQT` |
+| `RQTN` | `QuantityTableGenerator.CreateQuantityTables` | Build the rebar quantity/specification table | `RQT` |
 | `CREATELAYERS` / `CL` | `LayerCreator.CreateLayersCommand` | Create 41 standard layers with prefix, color, linetype, weight | — |
 | `ADETN` | `LegacyCommands.ChangeAdetCommand` | Change quantity (adet) in TB, keep multiplier/cap/aralik | `adet` |
 | `ADET2N` | `LegacyCommands.ChangeAdetCarpiCommand` | Change quantity multiplier ("3x" prefix) in TB | `adet2` |
@@ -39,7 +39,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `TDDKN` | `LegacyCommands.CopyAttributesCommand` | Copy all matching-tag attributes from a reference block to target blocks | `tddk` |
 | `TDDUN` | `LegacyCommands.ApplyReferenceToMatchingPozCommand` | Apply reference position's data to all blocks sharing the same POZ | `tddu` |
 | `TDD1N`/`TDD2N`/`TDD3N` | `LegacyCommands.RearrangeByScheme` | Force TB/BOY/NOT into layout scheme 1, 2, or 3 | `tdd1`/`tdd2`/`tdd3` |
-| `TDDHN` | `LegacyCommands.PrintErrorLogCommand` | Print RQT's `error.txt` validation log into the drawing as text | `tddh` |
+| `TDDHN` | `LegacyCommands.PrintErrorLogCommand` | Print RQTN's `error.txt` validation log into the drawing as text | `tddh` |
 | `DIEZN` | `LegacyCommands.MarkHashPositionsCommand` | Mark blocks containing `#` in attributes with arrows | `diez` |
 | `PPPN` | `LegacyCommands.DrawArrowsToPozCommand` | Draw arrows from positions matching a POZ to a point | `ppp` |
 | `PPP2N` | `LegacyCommands.FindAndReviewPozCommand` | Find positions by POZ, zoom to each, interactive review/delete | `ppp2` |
@@ -55,7 +55,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | Old LISP command | Why not ported |
 |---|---|
 | `77b` | Walks undocumented internal FIELD-object DXF structure (dictionary group codes 360/331) that can't be verified without a real AutoCAD session — porting blind risked shipping a silently-broken command. Old LISP `77b` still works if loaded. Deliberately excluded, not just deferred. |
-| `pzredef` | Not a position-editing command — it refreshes standalone `PZ_00`..`PZ_99` block *definitions* from `PZ_<tip>.dwg` template files (+ `ATTSYNC`), for blocks that may exist independently somewhere in a drawing. Nothing in `EEN`/`RQT`/etc. ever inserts these blocks, so it's disconnected from the rest of this plugin's workflow. Deliberately excluded for now, not just deferred. The `.dwg` templates do exist (found alongside `PZ_TUM.txt`, see below) if this is ever wanted. |
+| `pzredef` | Not a position-editing command — it refreshes standalone `PZ_00`..`PZ_99` block *definitions* from `PZ_<tip>.dwg` template files (+ `ATTSYNC`), for blocks that may exist independently somewhere in a drawing. Nothing in `EEN`/`RQTN`/etc. ever inserts these blocks, so it's disconnected from the rest of this plugin's workflow. Deliberately excluded for now, not just deferred. The `.dwg` templates do exist (found alongside `PZ_TUM.txt`, see below) if this is ever wanted. |
 
 `PZ_TUM.txt` (bend-length coefficients used by `TDDBN`) was not in this repo or in `Temp/` — it turned up
 in a sibling repo,

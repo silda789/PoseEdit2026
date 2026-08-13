@@ -632,7 +632,7 @@ namespace PoseEdit2026
         // ====================================================================================
         // КОМАНДА: TDDHN (было "tddh" в LISP)
         // ====================================================================================
-        // НАЗНАЧЕНИЕ: Выводит содержимое error.txt (файл ошибок, который создаёт RQT при
+        // НАЗНАЧЕНИЕ: Выводит содержимое error.txt (файл ошибок, который создаёт RQTN при
         // проверке метража) в чертёж построчно как текстовые примитивы, начиная с указанной
         // точки и опускаясь вниз.
         // ПЕРЕВЕДЕНО ИЗ: (defun c:tddh (/ pn1) ...) — QUANTITY2.LSP, строки ~1754-1769
@@ -647,7 +647,7 @@ namespace PoseEdit2026
             string errorFile = System.IO.Path.Combine(QuantityTableGenerator.GetClientPath(), "error.txt");
             if (!System.IO.File.Exists(errorFile))
             {
-                ed.WriteMessage("\nerror.txt bulunamadi. Once RQT calistirin.");
+                ed.WriteMessage("\nerror.txt bulunamadi. Once RQTN calistirin.");
                 return;
             }
 
