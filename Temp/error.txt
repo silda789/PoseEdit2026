@@ -3,15 +3,11 @@
 
  2.NoPoz: Toplam boy L=0 ! 
 
- 3.NoPoz: Toplam boy L=0 ! 
-
  4.NoPoz: Toplam boy L=0 ! 
 
  5.NoPoz: Toplam boy L=0 ! 
 
  6.NoPoz: Toplam boy L=0 ! 
-
- 7.NoPoz: Toplam boy L=0 ! 
 
  8.NoPoz: Toplam boy L=0 ! 
 
@@ -22,3 +18,5 @@
  11.NoPoz: Toplam boy L=0 ! 
 
  12.NoPoz: Toplam boy L=0 ! 
+
+ 3A.NoPoz: Toplam boy L=0 ! 
