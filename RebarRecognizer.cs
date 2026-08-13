@@ -1494,6 +1494,10 @@ namespace PoseEdit2026
                 ["R"] = result.R,
                 ["BOY"] = result.Length,
             });
+
+            // Без этого BOY остаётся невидимым/на старом месте и может наложиться на TB -
+            // именно эта функция решает, показывать ли BOY и где его разместить рядом с TB.
+            PozHelper.RepositionShapeText(blockId);
             return true;
         }
 
