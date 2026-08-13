@@ -303,8 +303,6 @@
                     -->
                         <Image x:Name="imgPreview"
                            Stretch="Uniform"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
                            Margin="1"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            RenderOptions.CachingHint="Cache"/>
