@@ -430,7 +430,7 @@ namespace PoseEdit2026
             // Например: "2x20Ø10/100 L=2260 Хомут" -> Note = "Хомут"
             string noteValue = "";
             string tbTextWithoutNote = tbText;
-            
+
             // Ищем "L=" в строке
             int lIndex = tbText.IndexOf("L=");
             if (lIndex > 0)
@@ -443,9 +443,10 @@ namespace PoseEdit2026
                 {
                     // Извлекаем Note (всё после пробела)
                     noteValue = afterL.Substring(spaceAfterLength + 1).Trim();
-                    // Убираем Note из строки для дальнейшего парсинга
-                    tbTextWithoutNote = tbText.Substring(0, lIndex + 2 + spaceAfterLength);
                 }
+                // "L=..." (и всё, что после) не относится к диаметру/шагу - отрезаем в любом случае,
+                // даже если Note нет (иначе "10Ø22 L=2350" без Note парсится как диаметр "22 L=2350")
+                tbTextWithoutNote = tbText.Substring(0, lIndex).TrimEnd();
             }
             
             // Если Note найден, записываем его
@@ -616,22 +617,7 @@ namespace PoseEdit2026
                 {
                     tbResult += "/" + txtSpace.Text.Trim();
                 }
-                
-                // Часть 4: L= txtLength (длина)
-                if (!string.IsNullOrWhiteSpace(txtLength.Text))
-                {
-                    string lengthValue = txtLength.Text.Trim();
-                    // Если txtLength не содержит "L=", добавляем его
-                    if (!lengthValue.StartsWith("L="))
-                    {
-                        tbResult += " L=" + lengthValue;
-                    }
-                    else
-                    {
-                        tbResult += " " + lengthValue;
-                    }
-                }
-                
+
                 // Часть 5: Note (примечание) в конце строки
                 if (!string.IsNullOrWhiteSpace(txtNote.Text))
                 {
@@ -642,11 +628,13 @@ namespace PoseEdit2026
                 // СОХРАНЕНИЕ АТРИБУТОВ В БЛОК
                 // ====================================================================================
                 Dictionary<string, string> newValues = new Dictionary<string, string>();
-                
+
                 // Основные атрибуты
                 newValues["POZ"] = txtPose.Text;
-                newValues["TB"] = tbResult; // Полная строка с шагом, длиной и Note
-                // BOY не сохраняем отдельно, так как длина уже включена в строку TB (чтобы не дублировалось)
+                newValues["TB"] = tbResult;
+                // BOY - отдельный атрибут (как везде в LegacyCommands.cs/PozHelper.cs), а не часть
+                // строки TB - иначе ParseTB при следующем открытии путает длину с диаметром
+                newValues["BOY"] = txtLength.Text.Trim();
                 newValues["TIP"] = txtType.Text;
 
                 // Сохраняем ARALIK (SPACE) - шаг арматуры отдельным атрибутом
@@ -671,6 +659,7 @@ namespace PoseEdit2026
                 newValues["R"] = GetValueOrTag(txtR);
 
                 BlockHelper.SetAttributes(_currentBlockId, newValues);
+                PozHelper.RepositionShapeText(_currentBlockId);
 
                 Document doc = App.DocumentManager.MdiActiveDocument;
                 doc.Editor.Command("_.UPDATEFIELD", _currentBlockId, "");
@@ -837,17 +826,14 @@ namespace PoseEdit2026
                 if (!string.IsNullOrEmpty(txtItemMult.Text)) tbResult += txtItemMult.Text + "x";
                 tbResult += txtItem.Text + "Ø" + txtDiameter.Text;
                 if (!string.IsNullOrWhiteSpace(txtSpace.Text)) tbResult += "/" + txtSpace.Text.Trim();
-                if (!string.IsNullOrWhiteSpace(txtLength.Text))
-                {
-                    string lv = txtLength.Text.Trim();
-                    tbResult += lv.StartsWith("L=") ? " " + lv : " L=" + lv;
-                }
                 if (!string.IsNullOrWhiteSpace(txtNote.Text)) tbResult += " " + txtNote.Text.Trim();
 
                 var newValues = new Dictionary<string, string>
                 {
                     ["POZ"]  = targetPoz,
                     ["TB"]   = tbResult,
+                    // BOY - отдельный атрибут, не часть строки TB (см. btnUpdate_Click)
+                    ["BOY"]  = txtLength.Text.Trim(),
                     ["TIP"]  = txtType.Text,
                     ["A"]    = GetValueOrTag(txtA),
                     ["B"]    = GetValueOrTag(txtB),
@@ -864,6 +850,7 @@ namespace PoseEdit2026
                 Document doc = App.DocumentManager.MdiActiveDocument;
                 Database db  = doc.Database;
                 int updated  = 0;
+                var updatedIds = new List<ObjectId>();
 
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
@@ -883,10 +870,15 @@ namespace PoseEdit2026
                         if (!attrs.ContainsKey("POZ") || attrs["POZ"] != targetPoz) continue;
 
                         BlockHelper.SetAttributes(id, newValues);
+                        updatedIds.Add(id);
                         updated++;
                     }
                     tr.Commit();
                 }
+
+                // Расставляем TB/BOY/NOT по местам у каждого обновлённого блока (отдельно от
+                // основной транзакции выше - RepositionShapeText открывает свою собственную)
+                foreach (ObjectId id in updatedIds) PozHelper.RepositionShapeText(id);
 
                 MessageBox.Show($"Updated {updated} block(s) with POZ = {targetPoz}.", "UpdateAll", MessageBoxButton.OK, MessageBoxImage.Information);
             }
