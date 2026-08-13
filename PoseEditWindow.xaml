@@ -11,7 +11,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="POSE EDIT 2024-2026 ARS Co."
-        Height="480" Width="960"
+        Height="480" Width="1070"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#F0F0F0">
@@ -290,7 +290,7 @@
                             <!-- Поля внизу занимают сколько нужно -->
                             </Grid.RowDefinitions>
 
-                            <GroupBox Header="Rebar Shape Preview" Grid.Row="0" Padding="4" ClipToBounds="True">
+                            <GroupBox Header="Rebar Shape Preview" Grid.Row="0" Padding="2" ClipToBounds="True">
                         <!--
                     Улучшенное отображение изображения:
                     - Stretch="Uniform" - сохраняет пропорции, вписывается в контейнер (НЕ обрезает края)
@@ -305,7 +305,7 @@
                            Stretch="Uniform"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="2"
+                           Margin="1"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            RenderOptions.CachingHint="Cache"/>
                             </GroupBox>
