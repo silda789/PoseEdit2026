@@ -54,14 +54,14 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | Old LISP command | Why not ported |
 |---|---|
 | `77b` | Walks undocumented internal FIELD-object DXF structure (dictionary group codes 360/331) that can't be verified without a real AutoCAD session — porting blind risked shipping a silently-broken command. Old LISP `77b` still works if loaded. Deliberately excluded, not just deferred. |
-| `pzredef` | Needs a whole family of per-type `PZ_<tip>.dwg` block template files. These now exist (found alongside `PZ_TUM.txt`, see below) but aren't in this repo yet — porting `pzredef` means embedding ~100 DWG resources, a separate, larger task from `TDDBN`. |
+| `pzredef` | Not a position-editing command — it refreshes standalone `PZ_00`..`PZ_99` block *definitions* from `PZ_<tip>.dwg` template files (+ `ATTSYNC`), for blocks that may exist independently somewhere in a drawing. Nothing in `EEN`/`RQT`/etc. ever inserts these blocks, so it's disconnected from the rest of this plugin's workflow. Deliberately excluded for now, not just deferred. The `.dwg` templates do exist (found alongside `PZ_TUM.txt`, see below) if this is ever wanted. |
 | `pozsil` (clear POZ, set to 0) | No `(defun c:pozsil ...)` (or similarly-named function) found anywhere in `Temp/` — only a routine `att_field_sil` (unrelated: removes an ACAD_FIELD) exists. Provide the source if this should still be ported. |
 
-`PZ_TUM.txt` (bend-length coefficients used by `TDDBN`) and the `PZ_<tip>.dwg` templates needed for
-`pzredef` were not in this repo or in `Temp/` — they turned up in a sibling repo,
+`PZ_TUM.txt` (bend-length coefficients used by `TDDBN`) was not in this repo or in `Temp/` — it turned up
+in a sibling repo,
 `AutoCAD2024Final/MISC_Files/RCP-KJ_metraj_LISP_R2/Ren_LISP_R2/Statik_Standart/RENAISSANCE_SERVER/Standard/`,
-outside this repository. `PZ_TUM.txt` is now embedded at `Resources/PZ_TUM.txt`. If `pzredef` is wanted,
-its DWG templates are at that same source path — see `Temp/Command/POSREDEF.LSP`.
+outside this repository, and is now embedded at `Resources/PZ_TUM.txt`. The `PZ_<tip>.dwg` templates for
+`pzredef` are at that same source path if it's ever wanted — see `Temp/Command/POSREDEF.LSP`.
 
 ## Architecture
 
