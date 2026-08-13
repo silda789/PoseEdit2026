@@ -372,11 +372,19 @@ namespace PoseEdit2026
 
             if (fiIndex >= 0)
             {
-                int slashIndex = tb.IndexOf("/", fiIndex);
-                if (slashIndex > fiIndex)
+                int start = fiIndex + fiLength;
+                int slashIndex = tb.IndexOf("/", start);
+                int end = slashIndex >= 0 ? slashIndex : tb.Length;
+
+                // На случай старых TB, где после диаметра ещё шёл "L=..."/заметка через пробел
+                // (до фикса TB/BOY они хранились вместе) - обрезаем и по первому пробелу тоже
+                int spaceIndex = tb.IndexOf(' ', start);
+                if (spaceIndex >= 0 && spaceIndex < end) end = spaceIndex;
+
+                if (end > start)
                 {
-                    string capStr = tb.Substring(fiIndex + fiLength, slashIndex - fiIndex - fiLength);
-                    return capStr.Trim();
+                    string capStr = tb.Substring(start, end - start).Trim();
+                    if (capStr.Length > 0) return capStr;
                 }
             }
 
