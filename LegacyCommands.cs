@@ -1398,5 +1398,41 @@ namespace PoseEdit2026
             }
             return false;
         }
+
+        // ====================================================================================
+        // КОМАНДА: POZCLAYERN (было "pozclayer" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Переносит все блоки RL-POS на слой "ren.mtr.tb", создавая слой,
+        // если он ещё не существует.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:pozclayer (/) ...) — QUANTITY2.LSP, строки ~66-69
+        [CommandMethod("POZCLAYERN")]
+        public static void MoveToRenMtrTbLayerCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            PromptSelectionResult selRes = ed.SelectAll(RlPosFilter());
+            if (selRes.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nRL-POS blogu bulunamadi.");
+                return;
+            }
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                EnsureLayer(tr, db, "ren.mtr.tb");
+                foreach (ObjectId id in selRes.Value.GetObjectIds())
+                {
+                    BlockReference blkRef = tr.GetObject(id, OpenMode.ForWrite) as BlockReference;
+                    if (blkRef == null) continue;
+                    blkRef.Layer = "ren.mtr.tb";
+                }
+                tr.Commit();
+            }
+
+            ed.WriteMessage($"\n{selRes.Value.Count} poz \"ren.mtr.tb\" katmanina tasindi.");
+        }
     }
 }

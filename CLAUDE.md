@@ -46,6 +46,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `POZVERN` | `LegacyCommands.AutoNumberPositionsCommand` | Auto-assign POZ numbers, grouping identical-geometry positions | `pozver` |
 | `77N` | `LegacyCommands.CreateLinkedCalloutCommand` | Create a linked RL-POS2 callout block with ACAD_FIELD references | `77` |
 | `PZGN` | `LegacyCommands.SyncBlockDefinitionCommand` | Redefine RL-POS from the embedded template and ATTSYNC all instances (batch op — save first) | `pzg` |
+| `POZCLAYERN` | `LegacyCommands.MoveToRenMtrTbLayerCommand` | Move all RL-POS blocks to layer `ren.mtr.tb`, creating it if missing | `pozclayer` |
 
 ### Not ported
 
@@ -55,7 +56,6 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `tddb` | Needs a `PZ_TUM.txt` bend-length coefficient table (per BS8666 shape type) that does not exist anywhere in this repo or in `Temp/`. Fabricating structural bend-allowance coefficients isn't something to guess at. |
 | `pzredef` | Same missing `PZ_TUM.txt`, plus a whole family of per-type `PZ_<tip>.dwg` block files that also don't exist in the repo. |
 | `pozsil` (clear POZ, set to 0) | No `(defun c:pozsil ...)` (or similarly-named function) found anywhere in `Temp/` — only a routine `att_field_sil` (unrelated: removes an ACAD_FIELD) exists. Provide the source if this should still be ported. |
-| `pozclayer` (move `RL-POS*` to layer `ren.mtr.tb`) | Not requested in the final command list for this migration pass; trivial one-liner (`c:pozclayer` in `QUANTITY2.LSP`) if wanted later. |
 
 If any missing coefficient/template files turn up later, `TDDB`/`PZREDEF` can be ported the same way as
 everything else here — see `Temp/Command/QUANTITY2.LSP` (`b_h`, `PZ_TUM_coz`) and
