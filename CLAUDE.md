@@ -65,23 +65,7 @@ everything else here — see `Temp/Command/QUANTITY2.LSP` (`b_h`, `PZ_TUM_coz`) 
 
 ### Key classes
 
-**`Commands.cs`** — All `[CommandMethod]` entry points. The `EEN` command is the main flow: saves AutoCAD system variables (`CLAYER`, `DIMZIN`, `ATTREQ`), ensures the `ren.mtr.tb` layer exists, prompts for block selection or insertion point, extracts `RL-POS.dwg`/`RL-POS2.dwg` from embedded resources to a temp file, inserts them, then opens `PoseEditWindow`.
-
-**`PoseEditWindow.xaml/.cs`** — Main WPF dialog. Displays 94 rebar shape images (`Shape_00.png`–`Shape_93.png`), material selectors, dimension fields (A–F, R), quantity, and notes. Writes results back to block attributes on dialog close.
-
-**`AppSettings.cs`** — Static singleton for global state: drawing units (m/cm/mm), sheet scale, table language, project name. Shared across all commands.
-
-**`BlockHelper.cs`** — Static utilities for reading/writing AutoCAD block attributes as dictionaries. Used everywhere attributes are accessed.
-
-**`RebarRecognizer.cs`** — Geometric algorithm that analyzes a polyline and auto-detects the BS 8666 rebar shape code (00=straight, 11=L-bend, 21=U-bend, etc.) and extracts dimensions A–F and radius R.
-
-**`LayerCreator.cs`** — `CREATELAYERS`/`CL` commands. Creates 41 standard layers.
-
-**`QuantityTableGenerator.cs`** — `RQT` command. Aggregates all rebar position blocks and generates an AutoCAD specification table. Also exposes `GetClientPath`/`GetUnits`/`GetScale`/`ParseBoyInt` as `internal` for reuse by `LegacyCommands.cs`.
-
-**`PozHelper.cs`** — Shared engine for the `*N` legacy-command ports: TB-string parsing (`GetAdetCarpi`/`GetAdet`/`GetCap`/`GetAralik`), `RepositionShapeText` (auto-snaps BOY/NOT next to TB after an edit — port of AutoLISP `poz_sekil_topla`), and low-level attribute-position helpers (`MoveAttrTo`, `GetBlockGeometry`).
-
-**`LegacyCommands.cs`** — All the `*N`-suffixed command ports listed in the command table below (`ADETN`, `CAPN`, `DEGISN`, `TDDUN`, `POZVERN`, `PZGN`, etc.), translated from `Temp/Command/QUANTITY2.LSP` and related files.
+See skill `poseedit-architecture` for the per-file breakdown of what each core class does (`Commands.cs`, `PoseEditWindow`, `AppSettings.cs`, `BlockHelper.cs`, `RebarRecognizer.cs`, `LayerCreator.cs`, `QuantityTableGenerator.cs`, `PozHelper.cs`, `LegacyCommands.cs`).
 
 ### Patterns
 
@@ -91,7 +75,3 @@ everything else here — see `Temp/Command/QUANTITY2.LSP` (`b_h`, `PZ_TUM_coz`) 
 - Shape images are WPF resources (not embedded), referenced via `pack://application:,,,/` URIs.
 - `#nullable disable` is used at the top of each file — do not remove it.
 
-## Dependencies
-
-- `AutoCAD.NET` / `AutoCAD.NET.Core` / `AutoCAD.NET.Model` v25.1.0 — AutoCAD 2025/2026 API
-- Target: `net8.0-windows`, WPF enabled, C# `latest` (12)
