@@ -11,7 +11,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="POSE EDIT 2024-2026 ARS Co."
-        Height="440" Width="960"
+        Height="480" Width="960"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#F0F0F0">
@@ -138,8 +138,10 @@
                             <RowDefinition Height="32"/>
                             <!-- 7: Type -->
                             <!-- 8: Material -->
-                            <RowDefinition/>
-                            <!-- 9: ПУСТОТА (Распорка, толкает Calc вниз) -->
+                            <RowDefinition MaxHeight="50"/>
+                            <!-- 9: Распорка над кнопкой Calculation - ограничена, чтобы не растягиваться
+                                 вместе с окном (иначе при увеличении окна ради картинки в Preview сюда
+                                 снова вернулась бы лишняя пустота) -->
                             <RowDefinition Height="Auto"/>
                             <!-- 10: Кнопка Calculation -->
                         </Grid.RowDefinitions>
@@ -217,8 +219,8 @@
                             <!-- 6: R (выровнено с Length) -->
                             <RowDefinition Height="32"/>
                             <!-- 7: Shape Number (опущен вниз) -->
-                            <RowDefinition Height="*"/>
-                            <!-- 8: Пустота -->
+                            <RowDefinition Height="*" MaxHeight="50"/>
+                            <!-- 8: Распорка над кнопкой Determination - ограничена так же, как в Main Data -->
                             <RowDefinition Height="Auto"/>
                             <!-- 9: Determination -->
                         </Grid.RowDefinitions>
