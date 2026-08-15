@@ -50,6 +50,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `TDDBN` | `LegacyCommands.CalculateBendLengthCommand` | Compute rebar length from A-F/R using per-shape-type coefficients (`Resources/PZ_TUM.txt`), write to BOY | `tddb` |
 | `POZSILN` | `LegacyCommands.ClearPozCommand` | Reset POZ to `0` on selected RL-POS blocks (undo of POZVERN's numbering) | `pozsil` |
 | `LAYSHIFT` | `RoutineCommands.ShiftLayoutNumbersCommand` | Renumber every numbered Layout tab by a constant offset (e.g. all 55-199 -> 66-211) | — |
+| `LAYRENUM` | `RoutineCommands.RenumberLayoutsSequentiallyCommand` | Renumber every numbered Layout tab sequentially from a given start value, in tab order (e.g. start=55 -> 55,56,57,...) | — |
 
 ### Not ported
 
