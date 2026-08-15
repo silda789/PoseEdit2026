@@ -49,6 +49,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `POZCLAYERN` | `LegacyCommands.MoveToRenMtrTbLayerCommand` | Move all RL-POS blocks to layer `ren.mtr.tb`, creating it if missing | `pozclayer` |
 | `TDDBN` | `LegacyCommands.CalculateBendLengthCommand` | Compute rebar length from A-F/R using per-shape-type coefficients (`Resources/PZ_TUM.txt`), write to BOY | `tddb` |
 | `POZSILN` | `LegacyCommands.ClearPozCommand` | Reset POZ to `0` on selected RL-POS blocks (undo of POZVERN's numbering) | `pozsil` |
+| `LAYSHIFT` | `RoutineCommands.ShiftLayoutNumbersCommand` | Renumber every numbered Layout tab by a constant offset (e.g. all 55-199 -> 66-211) | — |
 
 ### Not ported
 
@@ -68,6 +69,11 @@ outside this repository, and is now embedded at `Resources/PZ_TUM.txt`. The `PZ_
 ### Key classes
 
 See skill `poseedit-architecture` for the per-file breakdown of what each core class does (`Commands.cs`, `PoseEditWindow`, `AppSettings.cs`, `BlockHelper.cs`, `RebarRecognizer.cs`, `LayerCreator.cs`, `QuantityTableGenerator.cs`, `PozHelper.cs`, `LegacyCommands.cs`, `ExtensionApp.cs`).
+
+`RoutineCommands.cs` is a grab-bag for small AutoCAD utility commands that aren't about editing
+RL-POS blocks (drawing-wide housekeeping like renumbering Layout tabs). Not yet covered by the
+`poseedit-architecture` skill — add new one-off "quick task" commands here rather than starting
+another file, unless the command grows into its own subsystem.
 
 ### Patterns
 
