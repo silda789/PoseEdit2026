@@ -5,15 +5,18 @@
 //             монолитных балок и ригелей.
 //
 // ТЕКУЩЕЕ СОСТОЯНИЕ (см. CLAUDE.md / память сессии): открывает окно ввода данных
-// (BeamDrawWindow) и просто печатает введённые данные в командную строку AutoCAD -
-// самого черчения ещё нет, методика (шаг хомутов у опор/в пролёте, крюки, анкеровка)
-// будет описана пользователем позже, отдельно для каждого шага.
+// (BeamDrawWindow), затем чертит только "скелет" балки (BeamDrawer.DrawSkeleton) -
+// ленту балки, опоры, оси, размеры пролётов и подписи сечений. АРМАТУРЫ (хомутов,
+// крюков, анкеровки) на чертеже ещё нет - методика для неё будет описана пользователем
+// позже, отдельно для каждого шага.
 // ====================================================================================
 #nullable disable
 using System.Linq; // Sum() - для подсчёта суммарной длины балки в отчёте.
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.DatabaseServices; // Database - нужна, чтобы передать её в BeamDrawer.
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry; // Point3d - точка вставки, которую спрашиваем у пользователя.
 
 namespace BEAMDRAW
 {
@@ -25,6 +28,7 @@ namespace BEAMDRAW
             Document doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             Editor ed = doc.Editor;
+            Database db = doc.Database;
 
             // Создаём "пустую" балку с одним пролётом по умолчанию (см. Beam.CreateDefaultSpan
             // в BeamData.cs) и открываем окно ввода данных.
@@ -49,14 +53,29 @@ namespace BEAMDRAW
                 return;
             }
 
-            // Черчения пока нет - просто печатаем сводку введённых данных, чтобы
-            // подтвердить, что окно и модель данных работают правильно "от начала до
-            // конца" (ввод -> OK -> данные доступны в коде команды).
-            // No drawing yet - just print a summary of the entered data to confirm the
-            // window and data model work end to end (input -> OK -> data available here).
             double totalLength = beam.Spans.Sum(s => s.Length);
             ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov/spans {beam.Spans.Count}, summarnaya dlina/total length {totalLength:F2} m.");
-            ed.WriteMessage("\nChertezh poka ne stroitsya - zhdem metodiku postroeniya (shag homutov, kryuki, ankerovka i t.d.). / Drawing not built yet - waiting on the drawing methodology (stirrup spacing, hooks, anchorage, etc.).");
+
+            // Спрашиваем у пользователя, ГДЕ на чертеже начать (левый нижний угол ленты
+            // балки, ось №1) - стандартный приём AutoCAD-команд "укажи точку".
+            PromptPointOptions ppo = new PromptPointOptions(
+                "\nUkazhite tochku vstavki (levyi nizhnii ugol, os 1) / Specify insertion point (bottom-left, axis 1): ");
+            PromptPointResult ppr = ed.GetPoint(ppo);
+            if (ppr.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nBEAMDRAW: vstavka otmenena. / Insertion cancelled.");
+                return;
+            }
+
+            // doc.LockDocument() - обязательная "блокировка" документа перед тем, как
+            // менять базу чертежа из кода команды (а не через обычный пользовательский
+            // ввод) - тот же приём, что в LegacyCommands.cs основного проекта.
+            using (doc.LockDocument())
+            {
+                BeamDrawer.DrawSkeleton(db, beam, ppr.Value);
+            }
+
+            ed.WriteMessage("\nBEAMDRAW: skelet balki postroen (bez armatury - metodika eshche ne opisana). / Beam skeleton drawn (no reinforcement yet - methodology not described yet).");
         }
     }
 }
