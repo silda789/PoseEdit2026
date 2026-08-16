@@ -9,6 +9,17 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- BEAMDRAW - отдельный проект в подпапке этого же репозитория. Явно исключаем его файлы
+       из автоматического glob-сборщика PoseEdit2026 (иначе SDK рекурсивно подхватит
+       BEAMDRAW\*.cs и даже его obj\*.cs, что даёт дублирующиеся сборочные атрибуты). -->
+  <ItemGroup>
+    <Compile Remove="BEAMDRAW\**" />
+    <EmbeddedResource Remove="BEAMDRAW\**" />
+    <None Remove="BEAMDRAW\**" />
+    <Page Remove="BEAMDRAW\**" />
+    <Resource Remove="BEAMDRAW\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="Resources\RL-POS.dwg" />
     <None Remove="Resources\RL-POS2.dwg" />
