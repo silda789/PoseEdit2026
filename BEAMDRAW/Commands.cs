@@ -40,16 +40,23 @@ namespace BEAMDRAW
 
             if (result != true)
             {
-                ed.WriteMessage("\nBEAMDRAW: otmeneno polzovatelem.");
+                // Kirillica na komandnoy stroke AutoCAD nenadyozhna (sm. CLAUDE.md /
+                // suschestvuyuschie *N komandy v PoseEdit2026) - poetomu tut translit RU
+                // + angliyskiy tekst, a ne normalnaya kirillica.
+                // Cyrillic on the AutoCAD command line is unreliable - transliterated
+                // RU + English instead.
+                ed.WriteMessage("\nBEAMDRAW: otmeneno polzovatelem. / Cancelled by user.");
                 return;
             }
 
             // Черчения пока нет - просто печатаем сводку введённых данных, чтобы
             // подтвердить, что окно и модель данных работают правильно "от начала до
             // конца" (ввод -> OK -> данные доступны в коде команды).
+            // No drawing yet - just print a summary of the entered data to confirm the
+            // window and data model work end to end (input -> OK -> data available here).
             double totalLength = beam.Spans.Sum(s => s.Length);
-            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov {beam.Spans.Count}, summarnaya dlina {totalLength:F2} m.");
-            ed.WriteMessage("\nChertezh poka ne stroitsya - zhdem metodiku postroeniya (shag homutov, kryuki, ankerovka i t.d.).");
+            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov/spans {beam.Spans.Count}, summarnaya dlina/total length {totalLength:F2} m.");
+            ed.WriteMessage("\nChertezh poka ne stroitsya - zhdem metodiku postroeniya (shag homutov, kryuki, ankerovka i t.d.). / Drawing not built yet - waiting on the drawing methodology (stirrup spacing, hooks, anchorage, etc.).");
         }
     }
 }

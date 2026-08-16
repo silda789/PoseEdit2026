@@ -67,13 +67,13 @@ namespace BEAMDRAW
         // уточним, когда будет описана методика черчения.
         public static readonly List<string> SectionTypes = new List<string>
         {
-            "Slab - Slab",
-            "Without slab - Slab",
-            "Slab - Without slab",
-            "Without slab - Without slab",
-            "Inverted: Slab - Slab",
-            "Inverted: Without slab - Slab",
-            "Inverted: Slab - Without slab",
+            "Slab - Slab / Плита - плита",
+            "Without slab - Slab / Без плиты - плита",
+            "Slab - Without slab / Плита - без плиты",
+            "Without slab - Without slab / Без плиты - без плиты",
+            "Inverted: Slab - Slab / Перевёрнутое: плита - плита",
+            "Inverted: Without slab - Slab / Перевёрнутое: без плиты - плита",
+            "Inverted: Slab - Without slab / Перевёрнутое: плита - без плиты",
         };
     }
 

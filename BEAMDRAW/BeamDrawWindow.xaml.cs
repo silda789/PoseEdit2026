@@ -183,7 +183,7 @@ namespace BEAMDRAW
         private void UpdateTotalLength()
         {
             double total = _beam.Spans.Sum(s => s.Length);
-            lblTotalLength.Content = $"Суммарная длина: {total:F2} м";
+            lblTotalLength.Content = $"Суммарная длина / Total length: {total:F2} м/m";
         }
 
         // Событие DataGrid, которое срабатывает, когда пользователь заканчивает

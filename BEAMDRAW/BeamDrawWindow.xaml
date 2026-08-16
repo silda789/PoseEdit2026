@@ -17,7 +17,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BEAMDRAW"
         mc:Ignorable="d"
-        Title="BEAMDRAW - Ввод данных балки/ригеля"
+        Title="BEAMDRAW - Ввод данных балки/ригеля / Beam-Girder Data Entry"
         Height="700" Width="1400"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip"
@@ -74,10 +74,10 @@
         <!-- ==================== СТРОКА 0: Имя балки + значения по умолчанию ==================== -->
         <StackPanel Grid.Row="0" Orientation="Horizontal">
 
-            <!-- Имя/номер балки -->
-            <GroupBox Header="Балка">
+            <!-- Имя/номер балки / Beam name -->
+            <GroupBox Header="Балка / Beam">
                 <StackPanel Orientation="Horizontal">
-                    <Label Content="Название:"/>
+                    <Label Content="Название / Name:"/>
                     <TextBox x:Name="txtBeamName" Width="140"/>
                 </StackPanel>
             </GroupBox>
@@ -88,18 +88,22 @@
                 это прямой аналог кнопок CommandButton1-4 в старом Excel-инструменте
                 (BEAMDRAW\Temp\VBA_extracted.txt), которые точно так же копировали одно
                 введённое число во все столбцы-пролёты.
+
+                Default section/cover group: enter ONE value, "Apply to all" broadcasts
+                it into every row of the span table - direct analog of the old Excel
+                tool's CommandButton1-4.
             -->
-            <GroupBox Header="Сечение и привязки по умолчанию">
+            <GroupBox Header="Сечение и привязки по умолчанию / Default section &amp; cover">
                 <StackPanel Orientation="Horizontal">
-                    <Label Content="B, м:"/>
+                    <Label Content="B, м / m:"/>
                     <TextBox x:Name="txtDefaultB" Width="55"/>
-                    <Label Content="H, м:"/>
+                    <Label Content="H, м / m:"/>
                     <TextBox x:Name="txtDefaultH" Width="55"/>
-                    <Label Content="as, м:"/>
+                    <Label Content="as, м / m:"/>
                     <TextBox x:Name="txtDefaultAs" Width="55"/>
-                    <Label Content="ai, м:"/>
+                    <Label Content="ai, м / m:"/>
                     <TextBox x:Name="txtDefaultAi" Width="55"/>
-                    <Label Content="dH, м:"/>
+                    <Label Content="dH, м / m:"/>
                     <TextBox x:Name="txtDefaultDH" Width="55"/>
                     <!--
                         Click="btnApplySection_Click" - когда пользователь нажмёт эту
@@ -107,20 +111,20 @@
                         BeamDrawWindow.xaml.cs (code-behind). Так и связываются кнопки
                         в XAML с реальным кодом на C#.
                     -->
-                    <Button x:Name="btnApplySection" Content="Применить ко всем" Width="130" Click="btnApplySection_Click"/>
+                    <Button x:Name="btnApplySection" Content="Применить ко всем / Apply to all" Width="180" Click="btnApplySection_Click"/>
                 </StackPanel>
             </GroupBox>
 
-            <!-- Хомуты - общие на всю балку (не на пролёт), см. BeamData.cs -->
-            <GroupBox Header="Хомуты (на всю балку)">
+            <!-- Хомуты - общие на всю балку (не на пролёт), см. BeamData.cs / Stirrups - beam-wide, not per-span, see BeamData.cs -->
+            <GroupBox Header="Хомуты (на всю балку) / Stirrups (whole beam)">
                 <StackPanel Orientation="Horizontal">
-                    <Label Content="⌀, мм:"/>
+                    <Label Content="⌀, мм / mm:"/>
                     <TextBox x:Name="txtStirrupDiameter" Width="45"/>
-                    <Label Content="шаг в пролёте, м:"/>
+                    <Label Content="шаг в пролёте / mid-span step, м / m:"/>
                     <TextBox x:Name="txtStirrupSpacingGeneral" Width="55"/>
-                    <Label Content="шаг у опоры, м:"/>
+                    <Label Content="шаг у опоры / support step, м / m:"/>
                     <TextBox x:Name="txtStirrupSpacingSupport" Width="55"/>
-                    <Label Content="длина зоны у опоры, м:"/>
+                    <Label Content="длина зоны у опоры / support zone length, м / m:"/>
                     <TextBox x:Name="txtStirrupZoneLength" Width="55"/>
                 </StackPanel>
             </GroupBox>
@@ -128,22 +132,25 @@
             <!--
                 Арматура по умолчанию: то же самое "применить ко всем", но отдельно для
                 нижней и верхней арматуры (аналог CommandButton5-8 в старом Excel).
+
+                Default reinforcement group: same "apply to all" idea, separately for
+                bottom and top bars - analog of the old Excel tool's CommandButton5-8.
             -->
-            <GroupBox Header="Арматура по умолчанию">
+            <GroupBox Header="Арматура по умолчанию / Default reinforcement">
                 <StackPanel Orientation="Horizontal">
                     <StackPanel Orientation="Vertical">
                         <StackPanel Orientation="Horizontal">
-                            <Label Content="Низ As1: кол-во x ⌀,мм" Width="130"/>
+                            <Label Content="Низ/Bottom As1: кол-во/count x ⌀,мм/mm" Width="180"/>
                             <TextBox x:Name="txtDefBottomAs1Count" Width="35"/>
                             <TextBox x:Name="txtDefBottomAs1Diameter" Width="35"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Label Content="Верх As1: кол-во x ⌀,мм" Width="130"/>
+                            <Label Content="Верх/Top As1: кол-во/count x ⌀,мм/mm" Width="180"/>
                             <TextBox x:Name="txtDefTopAs1Count" Width="35"/>
                             <TextBox x:Name="txtDefTopAs1Diameter" Width="35"/>
                         </StackPanel>
                     </StackPanel>
-                    <Button x:Name="btnApplyRebar" Content="Применить ко всем" Width="130" Click="btnApplyRebar_Click"/>
+                    <Button x:Name="btnApplyRebar" Content="Применить ко всем / Apply to all" Width="180" Click="btnApplyRebar_Click"/>
                 </StackPanel>
             </GroupBox>
         </StackPanel>
@@ -179,22 +186,22 @@
                     объекта BeamSpan, который сейчас отображается в этой строке.
                     Header - подпись столбца, которую видит пользователь.
                 -->
-                <DataGridTextColumn Header="L, м" Binding="{Binding Length}" Width="60"/>
-                <DataGridTextColumn Header="as, м" Binding="{Binding As}" Width="55"/>
-                <DataGridTextColumn Header="ai, м" Binding="{Binding Ai}" Width="55"/>
-                <DataGridTextColumn Header="dH, м" Binding="{Binding DH}" Width="55"/>
-                <DataGridTextColumn Header="B, м" Binding="{Binding B}" Width="55"/>
-                <DataGridTextColumn Header="H, м" Binding="{Binding H}" Width="55"/>
+                <DataGridTextColumn Header="L, м/m" Binding="{Binding Length}" Width="65"/>
+                <DataGridTextColumn Header="as, м/m" Binding="{Binding As}" Width="60"/>
+                <DataGridTextColumn Header="ai, м/m" Binding="{Binding Ai}" Width="60"/>
+                <DataGridTextColumn Header="dH, м/m" Binding="{Binding DH}" Width="60"/>
+                <DataGridTextColumn Header="B, м/m" Binding="{Binding B}" Width="60"/>
+                <DataGridTextColumn Header="H, м/m" Binding="{Binding H}" Width="60"/>
 
-                <DataGridTextColumn Header="Низ As1 кол-во" Binding="{Binding BottomAs1Count}" Width="85"/>
-                <DataGridTextColumn Header="Низ As1 ⌀,мм" Binding="{Binding BottomAs1Diameter}" Width="80"/>
-                <DataGridTextColumn Header="Низ As2 кол-во" Binding="{Binding BottomAs2Count}" Width="85"/>
-                <DataGridTextColumn Header="Низ As2 ⌀,мм" Binding="{Binding BottomAs2Diameter}" Width="80"/>
+                <DataGridTextColumn Header="Низ/Bottom As1 кол-во/cnt" Binding="{Binding BottomAs1Count}" Width="120"/>
+                <DataGridTextColumn Header="Низ/Bottom As1 ⌀,мм/mm" Binding="{Binding BottomAs1Diameter}" Width="115"/>
+                <DataGridTextColumn Header="Низ/Bottom As2 кол-во/cnt" Binding="{Binding BottomAs2Count}" Width="120"/>
+                <DataGridTextColumn Header="Низ/Bottom As2 ⌀,мм/mm" Binding="{Binding BottomAs2Diameter}" Width="115"/>
 
-                <DataGridTextColumn Header="Верх As1 кол-во" Binding="{Binding TopAs1Count}" Width="90"/>
-                <DataGridTextColumn Header="Верх As1 ⌀,мм" Binding="{Binding TopAs1Diameter}" Width="85"/>
-                <DataGridTextColumn Header="Верх As2 кол-во" Binding="{Binding TopAs2Count}" Width="90"/>
-                <DataGridTextColumn Header="Верх As2 ⌀,мм" Binding="{Binding TopAs2Diameter}" Width="85"/>
+                <DataGridTextColumn Header="Верх/Top As1 кол-во/cnt" Binding="{Binding TopAs1Count}" Width="115"/>
+                <DataGridTextColumn Header="Верх/Top As1 ⌀,мм/mm" Binding="{Binding TopAs1Diameter}" Width="110"/>
+                <DataGridTextColumn Header="Верх/Top As2 кол-во/cnt" Binding="{Binding TopAs2Count}" Width="115"/>
+                <DataGridTextColumn Header="Верх/Top As2 ⌀,мм/mm" Binding="{Binding TopAs2Diameter}" Width="110"/>
 
                 <!--
                     DataGridComboBoxColumn - столбец-выпадающий список вместо текстового
@@ -202,20 +209,20 @@
                     BeamSpan.SectionTypes (см. BeamData.cs), SelectedItemBinding
                     привязывает выбор к свойству SectionType строки.
                 -->
-                <DataGridComboBoxColumn Header="Тип сечения"
+                <DataGridComboBoxColumn Header="Тип сечения / Section type"
                                          ItemsSource="{x:Static local:BeamSpan.SectionTypes}"
                                          SelectedItemBinding="{Binding SectionType}"
-                                         Width="160"/>
+                                         Width="220"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- ==================== СТРОКА 2: Нижняя панель кнопок ==================== -->
+        <!-- ==================== СТРОКА 2: Нижняя панель кнопок / Bottom button bar ==================== -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Label x:Name="lblTotalLength" Content="Суммарная длина: 0.00 м" Margin="0,0,20,0" VerticalAlignment="Center"/>
-            <Button x:Name="btnAddSpan" Content="Добавить пролёт" Width="130" Click="btnAddSpan_Click"/>
-            <Button x:Name="btnRemoveSpan" Content="Удалить пролёт" Width="130" Click="btnRemoveSpan_Click"/>
+            <Label x:Name="lblTotalLength" Content="Суммарная длина / Total length: 0.00 м/m" Margin="0,0,20,0" VerticalAlignment="Center"/>
+            <Button x:Name="btnAddSpan" Content="Добавить пролёт / Add span" Width="160" Click="btnAddSpan_Click"/>
+            <Button x:Name="btnRemoveSpan" Content="Удалить пролёт / Remove span" Width="160" Click="btnRemoveSpan_Click"/>
             <Button x:Name="btnOk" Content="OK" Width="80" IsDefault="True" Click="btnOk_Click"/>
-            <Button x:Name="btnCancel" Content="Отмена" Width="80" IsCancel="True" Click="btnCancel_Click"/>
+            <Button x:Name="btnCancel" Content="Отмена / Cancel" Width="110" IsCancel="True" Click="btnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>
