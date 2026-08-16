@@ -1,0 +1,221 @@
+<!--
+    ФАЙЛ: BeamDrawWindow.xaml
+    НАЗНАЧЕНИЕ: главное окно ввода данных балки для BEAMDRAW.
+
+    XAML - это язык РАЗМЕТКИ (похож на HTML), а не язык логики (как C#). Тут мы только
+    описываем, ЧТО должно быть на экране и как оно расположено. Вся "логика" (что
+    происходит по нажатию кнопки и т.п.) живёт в файле BeamDrawWindow.xaml.cs рядом -
+    это называется "code-behind" (код позади разметки).
+
+    Window - корневой элемент любого окна WPF. x:Class связывает эту разметку с классом
+    BEAMDRAW.BeamDrawWindow в code-behind файле.
+-->
+<Window x:Class="BEAMDRAW.BeamDrawWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BEAMDRAW"
+        mc:Ignorable="d"
+        Title="BEAMDRAW - Ввод данных балки/ригеля"
+        Height="700" Width="1400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip"
+        Background="#F0F0F0">
+
+    <!--
+        Window.Resources - "общие стили", как CSS-классы в вебе. Задаём один раз, как
+        должны выглядеть ВСЕ GroupBox / Label / TextBox / Button в этом окне - и не
+        повторяем одни и те же настройки на каждом элементе. Стиль скопирован из
+        PoseEditWindow.xaml, чтобы оба окна в Solution выглядели одинаково.
+    -->
+    <Window.Resources>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="BorderBrush" Value="#D0D0D0"/>
+            <Setter Property="Background" Value="White"/>
+        </Style>
+
+        <Style TargetType="Label">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="2"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Background" Value="#DDDDDD"/>
+        </Style>
+    </Window.Resources>
+
+    <!--
+        Главная сетка окна (Grid). Делим окно по ВЫСОТЕ на 3 строки (Grid.RowDefinitions):
+          Строка 0 (Auto)  - имя балки + панель "значения по умолчанию / применить ко всем"
+          Строка 1 (*)     - главная таблица пролётов (DataGrid), занимает всё оставшееся место
+          Строка 2 (Auto)  - нижняя панель кнопок (Добавить/Удалить пролёт, OK/Отмена)
+        "Auto" значит "ровно столько высоты, сколько нужно содержимому".
+        "*" значит "всё, что осталось после Auto-строк".
+    -->
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==================== СТРОКА 0: Имя балки + значения по умолчанию ==================== -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+
+            <!-- Имя/номер балки -->
+            <GroupBox Header="Балка">
+                <StackPanel Orientation="Horizontal">
+                    <Label Content="Название:"/>
+                    <TextBox x:Name="txtBeamName" Width="140"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!--
+                GroupBox "Сечение и привязки по умолчанию": тут задаём ОДНО значение, и
+                кнопкой "Применить ко всем" раздаём его во ВСЕ строки таблицы пролётов -
+                это прямой аналог кнопок CommandButton1-4 в старом Excel-инструменте
+                (BEAMDRAW\Temp\VBA_extracted.txt), которые точно так же копировали одно
+                введённое число во все столбцы-пролёты.
+            -->
+            <GroupBox Header="Сечение и привязки по умолчанию">
+                <StackPanel Orientation="Horizontal">
+                    <Label Content="B, м:"/>
+                    <TextBox x:Name="txtDefaultB" Width="55"/>
+                    <Label Content="H, м:"/>
+                    <TextBox x:Name="txtDefaultH" Width="55"/>
+                    <Label Content="as, м:"/>
+                    <TextBox x:Name="txtDefaultAs" Width="55"/>
+                    <Label Content="ai, м:"/>
+                    <TextBox x:Name="txtDefaultAi" Width="55"/>
+                    <Label Content="dH, м:"/>
+                    <TextBox x:Name="txtDefaultDH" Width="55"/>
+                    <!--
+                        Click="btnApplySection_Click" - когда пользователь нажмёт эту
+                        кнопку, WPF вызовет метод btnApplySection_Click в
+                        BeamDrawWindow.xaml.cs (code-behind). Так и связываются кнопки
+                        в XAML с реальным кодом на C#.
+                    -->
+                    <Button x:Name="btnApplySection" Content="Применить ко всем" Width="130" Click="btnApplySection_Click"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Хомуты - общие на всю балку (не на пролёт), см. BeamData.cs -->
+            <GroupBox Header="Хомуты (на всю балку)">
+                <StackPanel Orientation="Horizontal">
+                    <Label Content="⌀, мм:"/>
+                    <TextBox x:Name="txtStirrupDiameter" Width="45"/>
+                    <Label Content="шаг в пролёте, м:"/>
+                    <TextBox x:Name="txtStirrupSpacingGeneral" Width="55"/>
+                    <Label Content="шаг у опоры, м:"/>
+                    <TextBox x:Name="txtStirrupSpacingSupport" Width="55"/>
+                    <Label Content="длина зоны у опоры, м:"/>
+                    <TextBox x:Name="txtStirrupZoneLength" Width="55"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!--
+                Арматура по умолчанию: то же самое "применить ко всем", но отдельно для
+                нижней и верхней арматуры (аналог CommandButton5-8 в старом Excel).
+            -->
+            <GroupBox Header="Арматура по умолчанию">
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal">
+                            <Label Content="Низ As1: кол-во x ⌀,мм" Width="130"/>
+                            <TextBox x:Name="txtDefBottomAs1Count" Width="35"/>
+                            <TextBox x:Name="txtDefBottomAs1Diameter" Width="35"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Label Content="Верх As1: кол-во x ⌀,мм" Width="130"/>
+                            <TextBox x:Name="txtDefTopAs1Count" Width="35"/>
+                            <TextBox x:Name="txtDefTopAs1Diameter" Width="35"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Button x:Name="btnApplyRebar" Content="Применить ко всем" Width="130" Click="btnApplyRebar_Click"/>
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
+
+        <!-- ==================== СТРОКА 1: Таблица пролётов ==================== -->
+        <!--
+            DataGrid - готовая WPF-таблица: сама рисует строки/столбцы, сама даёт
+            редактировать ячейки (двойной клик или просто начать печатать). Нам не нужно
+            вручную рисовать сетку, как в Excel - DataGrid делает это сам.
+
+            ItemsSource="{Binding Spans}" - "Привязка" (Binding): DataGrid берёт строки
+            из свойства Spans объекта, который мы зададим в code-behind как DataContext
+            этого окна (см. BeamDrawWindow.xaml.cs). Когда мы добавляем/удаляем элемент
+            в Spans (это ObservableCollection - см. комментарий в BeamData.cs), таблица
+            обновляется САМА, без дополнительного кода.
+
+            AutoGenerateColumns="False" - НЕ создавать столбцы автоматически по всем
+            свойствам BeamSpan (получилось бы некрасиво и не по-русски) - вместо этого
+            ниже мы вручную описываем каждый нужный столбец через DataGridTextColumn.
+        -->
+        <DataGrid x:Name="dgSpans" Grid.Row="1" Margin="0,8"
+                  ItemsSource="{Binding Spans}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  SelectionMode="Extended"
+                  SelectionUnit="FullRow"
+                  AlternatingRowBackground="#F5F5F5"
+                  CellEditEnding="dgSpans_CellEditEnding">
+            <DataGrid.Columns>
+                <!--
+                    Binding="{Binding Length}" - берём значение из свойства Length того
+                    объекта BeamSpan, который сейчас отображается в этой строке.
+                    Header - подпись столбца, которую видит пользователь.
+                -->
+                <DataGridTextColumn Header="L, м" Binding="{Binding Length}" Width="60"/>
+                <DataGridTextColumn Header="as, м" Binding="{Binding As}" Width="55"/>
+                <DataGridTextColumn Header="ai, м" Binding="{Binding Ai}" Width="55"/>
+                <DataGridTextColumn Header="dH, м" Binding="{Binding DH}" Width="55"/>
+                <DataGridTextColumn Header="B, м" Binding="{Binding B}" Width="55"/>
+                <DataGridTextColumn Header="H, м" Binding="{Binding H}" Width="55"/>
+
+                <DataGridTextColumn Header="Низ As1 кол-во" Binding="{Binding BottomAs1Count}" Width="85"/>
+                <DataGridTextColumn Header="Низ As1 ⌀,мм" Binding="{Binding BottomAs1Diameter}" Width="80"/>
+                <DataGridTextColumn Header="Низ As2 кол-во" Binding="{Binding BottomAs2Count}" Width="85"/>
+                <DataGridTextColumn Header="Низ As2 ⌀,мм" Binding="{Binding BottomAs2Diameter}" Width="80"/>
+
+                <DataGridTextColumn Header="Верх As1 кол-во" Binding="{Binding TopAs1Count}" Width="90"/>
+                <DataGridTextColumn Header="Верх As1 ⌀,мм" Binding="{Binding TopAs1Diameter}" Width="85"/>
+                <DataGridTextColumn Header="Верх As2 кол-во" Binding="{Binding TopAs2Count}" Width="90"/>
+                <DataGridTextColumn Header="Верх As2 ⌀,мм" Binding="{Binding TopAs2Diameter}" Width="85"/>
+
+                <!--
+                    DataGridComboBoxColumn - столбец-выпадающий список вместо текстового
+                    поля. ItemsSource берёт варианты из статического списка
+                    BeamSpan.SectionTypes (см. BeamData.cs), SelectedItemBinding
+                    привязывает выбор к свойству SectionType строки.
+                -->
+                <DataGridComboBoxColumn Header="Тип сечения"
+                                         ItemsSource="{x:Static local:BeamSpan.SectionTypes}"
+                                         SelectedItemBinding="{Binding SectionType}"
+                                         Width="160"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- ==================== СТРОКА 2: Нижняя панель кнопок ==================== -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Label x:Name="lblTotalLength" Content="Суммарная длина: 0.00 м" Margin="0,0,20,0" VerticalAlignment="Center"/>
+            <Button x:Name="btnAddSpan" Content="Добавить пролёт" Width="130" Click="btnAddSpan_Click"/>
+            <Button x:Name="btnRemoveSpan" Content="Удалить пролёт" Width="130" Click="btnRemoveSpan_Click"/>
+            <Button x:Name="btnOk" Content="OK" Width="80" IsDefault="True" Click="btnOk_Click"/>
+            <Button x:Name="btnCancel" Content="Отмена" Width="80" IsCancel="True" Click="btnCancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
