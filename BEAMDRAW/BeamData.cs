@@ -56,24 +56,38 @@ namespace BEAMDRAW
         public int TopAs2Count { get; set; }
         public double TopAs2Diameter { get; set; }
 
-        // Тип сечения (см. BeamSpan.SectionTypes) - индекс в списке типов ниже.
+        // Тип сечения - хранит КЛЮЧ (SectionTypeOption.Key), например "SlabSlab", а не
+        // готовый текст на каком-то одном языке. Так переключение языка интерфейса
+        // (см. BeamDrawWindow.xaml.cs, SetLanguage) не "теряет" уже выбранное значение -
+        // ключ один и тот же независимо от того, какой язык сейчас показан на экране.
         public string SectionType { get; set; }
 
-        // "static readonly List<string>" - это ОБЩИЙ для всех BeamSpan список (не у
+        // Один вариант типа сечения: язык-независимый Key (для хранения в данных) +
+        // подпись на русском и на английском (для показа пользователю - см.
+        // DataGridComboBoxColumn.DisplayMemberPath в BeamDrawWindow.xaml, который
+        // переключается между DisplayRu/DisplayEn).
+        public class SectionTypeOption
+        {
+            public string Key { get; set; }
+            public string DisplayRu { get; set; }
+            public string DisplayEn { get; set; }
+        }
+
+        // "static readonly List<...>" - это ОБЩИЙ для всех BeamSpan список (не у
         // каждого пролёта свой, а один на весь проект), и его нельзя поменять после
         // создания (readonly = "только для чтения" после инициализации).
         // Список типов сечения - переписан со скриншота старого Excel-инструмента
         // (легенда "Section type" в BEAMDRAW\Temp\screenshots). Предварительный список,
         // уточним, когда будет описана методика черчения.
-        public static readonly List<string> SectionTypes = new List<string>
+        public static readonly List<SectionTypeOption> SectionTypeOptions = new List<SectionTypeOption>
         {
-            "Slab - Slab / Плита - плита",
-            "Without slab - Slab / Без плиты - плита",
-            "Slab - Without slab / Плита - без плиты",
-            "Without slab - Without slab / Без плиты - без плиты",
-            "Inverted: Slab - Slab / Перевёрнутое: плита - плита",
-            "Inverted: Without slab - Slab / Перевёрнутое: без плиты - плита",
-            "Inverted: Slab - Without slab / Перевёрнутое: плита - без плиты",
+            new SectionTypeOption { Key = "SlabSlab", DisplayRu = "Плита - плита", DisplayEn = "Slab - Slab" },
+            new SectionTypeOption { Key = "NoSlabSlab", DisplayRu = "Без плиты - плита", DisplayEn = "Without slab - Slab" },
+            new SectionTypeOption { Key = "SlabNoSlab", DisplayRu = "Плита - без плиты", DisplayEn = "Slab - Without slab" },
+            new SectionTypeOption { Key = "NoSlabNoSlab", DisplayRu = "Без плиты - без плиты", DisplayEn = "Without slab - Without slab" },
+            new SectionTypeOption { Key = "InvSlabSlab", DisplayRu = "Перевёрнутое: плита - плита", DisplayEn = "Inverted: Slab - Slab" },
+            new SectionTypeOption { Key = "InvNoSlabSlab", DisplayRu = "Перевёрнутое: без плиты - плита", DisplayEn = "Inverted: Without slab - Slab" },
+            new SectionTypeOption { Key = "InvSlabNoSlab", DisplayRu = "Перевёрнутое: плита - без плиты", DisplayEn = "Inverted: Slab - Without slab" },
         };
     }
 
@@ -139,7 +153,7 @@ namespace BEAMDRAW
                 TopAs1Diameter = DefaultTopAs1Diameter,
                 TopAs2Count = DefaultTopAs2Count,
                 TopAs2Diameter = DefaultTopAs2Diameter,
-                SectionType = BeamSpan.SectionTypes[0],
+                SectionType = BeamSpan.SectionTypeOptions[0].Key,
             };
         }
     }

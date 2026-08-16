@@ -9,6 +9,14 @@
 
     Window - корневой элемент любого окна WPF. x:Class связывает эту разметку с классом
     BEAMDRAW.BeamDrawWindow в code-behind файле.
+
+    ПРО ЯЗЫК ИНТЕРФЕЙСА: раньше тут были подписи вида "Название / Name" - оба языка сразу
+    в одной строке. Пользователь попросил вместо этого настоящий ПЕРЕКЛЮЧАТЕЛЬ (кнопки
+    RU/EN сверху), который меняет ВЕСЬ текст окна разом. Поэтому почти у каждого Label/
+    GroupBox/Button тут есть x:Name - без имени code-behind не может найти элемент и
+    поменять его текст в методе SetLanguage(...) (см. BeamDrawWindow.xaml.cs). Тексты в
+    XAML ниже - это НАЧАЛЬНЫЕ (русские) значения; реальные подписи на экране в итоге
+    решает SetLanguage(), который вызывается сразу при открытии окна.
 -->
 <Window x:Class="BEAMDRAW.BeamDrawWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -17,7 +25,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BEAMDRAW"
         mc:Ignorable="d"
-        Title="BEAMDRAW - Ввод данных балки/ригеля / Beam-Girder Data Entry"
+        Title="BEAMDRAW"
         Height="700" Width="1400"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip"
@@ -54,11 +62,40 @@
             <Setter Property="Height" Value="22"/>
             <Setter Property="Background" Value="#DDDDDD"/>
         </Style>
+
+        <!--
+            Отдельный стиль для двух кнопок-переключателей языка (RadioButton, но
+            нарисованных как обычные кнопки через ControlTemplate) - без этого стиля
+            RadioButton выглядел бы как маленький кружок с точкой, а не как кнопка.
+            IsChecked показывает, какой язык выбран СЕЙЧАС (подсвечена синим).
+        -->
+        <Style x:Key="LangButtonStyle" TargetType="RadioButton">
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="#B0B0B0" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Background" Value="#DDDDDD"/>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="#9FC6F5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <!--
         Главная сетка окна (Grid). Делим окно по ВЫСОТЕ на 3 строки (Grid.RowDefinitions):
-          Строка 0 (Auto)  - имя балки + панель "значения по умолчанию / применить ко всем"
+          Строка 0 (Auto)  - переключатель языка + имя балки + панель "по умолчанию"
           Строка 1 (*)     - главная таблица пролётов (DataGrid), занимает всё оставшееся место
           Строка 2 (Auto)  - нижняя панель кнопок (Добавить/Удалить пролёт, OK/Отмена)
         "Auto" значит "ровно столько высоты, сколько нужно содержимому".
@@ -71,89 +108,110 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ==================== СТРОКА 0: Имя балки + значения по умолчанию ==================== -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal">
-
-            <!-- Имя/номер балки / Beam name -->
-            <GroupBox Header="Балка / Beam">
-                <StackPanel Orientation="Horizontal">
-                    <Label Content="Название / Name:"/>
-                    <TextBox x:Name="txtBeamName" Width="140"/>
-                </StackPanel>
-            </GroupBox>
+        <!-- ==================== СТРОКА 0: Переключатель языка + имя балки + значения по умолчанию ==================== -->
+        <DockPanel Grid.Row="0">
 
             <!--
-                GroupBox "Сечение и привязки по умолчанию": тут задаём ОДНО значение, и
-                кнопкой "Применить ко всем" раздаём его во ВСЕ строки таблицы пролётов -
-                это прямой аналог кнопок CommandButton1-4 в старом Excel-инструменте
-                (BEAMDRAW\Temp\VBA_extracted.txt), которые точно так же копировали одно
-                введённое число во все столбцы-пролёты.
-
-                Default section/cover group: enter ONE value, "Apply to all" broadcasts
-                it into every row of the span table - direct analog of the old Excel
-                tool's CommandButton1-4.
+                Переключатель языка - две RadioButton в одной группе (GroupName делает их
+                "радио-кнопками" друг для друга: нажатие одной автоматически отжимает
+                другую - как переключатель каналов на старом телевизоре).
+                Checked="LangRu_Checked" / "LangEn_Checked" - методы в code-behind,
+                которые вызывают SetLanguage(false)/SetLanguage(true).
+                DockPanel.Dock="Right" прижимает эту панель к правому краю окна.
             -->
-            <GroupBox Header="Сечение и привязки по умолчанию / Default section &amp; cover">
-                <StackPanel Orientation="Horizontal">
-                    <Label Content="B, м / m:"/>
-                    <TextBox x:Name="txtDefaultB" Width="55"/>
-                    <Label Content="H, м / m:"/>
-                    <TextBox x:Name="txtDefaultH" Width="55"/>
-                    <Label Content="as, м / m:"/>
-                    <TextBox x:Name="txtDefaultAs" Width="55"/>
-                    <Label Content="ai, м / m:"/>
-                    <TextBox x:Name="txtDefaultAi" Width="55"/>
-                    <Label Content="dH, м / m:"/>
-                    <TextBox x:Name="txtDefaultDH" Width="55"/>
-                    <!--
-                        Click="btnApplySection_Click" - когда пользователь нажмёт эту
-                        кнопку, WPF вызовет метод btnApplySection_Click в
-                        BeamDrawWindow.xaml.cs (code-behind). Так и связываются кнопки
-                        в XAML с реальным кодом на C#.
-                    -->
-                    <Button x:Name="btnApplySection" Content="Применить ко всем / Apply to all" Width="180" Click="btnApplySection_Click"/>
-                </StackPanel>
-            </GroupBox>
-
-            <!-- Хомуты - общие на всю балку (не на пролёт), см. BeamData.cs / Stirrups - beam-wide, not per-span, see BeamData.cs -->
-            <GroupBox Header="Хомуты (на всю балку) / Stirrups (whole beam)">
-                <StackPanel Orientation="Horizontal">
-                    <Label Content="⌀, мм / mm:"/>
-                    <TextBox x:Name="txtStirrupDiameter" Width="45"/>
-                    <Label Content="шаг в пролёте / mid-span step, м / m:"/>
-                    <TextBox x:Name="txtStirrupSpacingGeneral" Width="55"/>
-                    <Label Content="шаг у опоры / support step, м / m:"/>
-                    <TextBox x:Name="txtStirrupSpacingSupport" Width="55"/>
-                    <Label Content="длина зоны у опоры / support zone length, м / m:"/>
-                    <TextBox x:Name="txtStirrupZoneLength" Width="55"/>
-                </StackPanel>
-            </GroupBox>
-
             <!--
-                Арматура по умолчанию: то же самое "применить ко всем", но отдельно для
-                нижней и верхней арматуры (аналог CommandButton5-8 в старом Excel).
-
-                Default reinforcement group: same "apply to all" idea, separately for
-                bottom and top bars - analog of the old Excel tool's CommandButton5-8.
+                ВНИМАНИЕ: IsChecked="True" здесь СПЕЦИАЛЬНО не задан в XAML (хотя RU и
+                должен быть выбран по умолчанию) - если поставить его прямо тут, WPF
+                вызовет обработчик Checked="LangRu_Checked" ПРЯМО ВНУТРИ
+                InitializeComponent() в конструкторе, то есть ДО того, как в конструкторе
+                выполнится следующая строка "_beam = beam;" - в этот момент _beam ещё
+                null, и SetLanguage(...) упадёт с NullReferenceException при попытке
+                обратиться к _beam.Spans. Поэтому rbLangRu.IsChecked = true; выставляется
+                кодом в конструкторе (BeamDrawWindow.xaml.cs), уже ПОСЛЕ "_beam = beam;".
             -->
-            <GroupBox Header="Арматура по умолчанию / Default reinforcement">
-                <StackPanel Orientation="Horizontal">
-                    <StackPanel Orientation="Vertical">
-                        <StackPanel Orientation="Horizontal">
-                            <Label Content="Низ/Bottom As1: кол-во/count x ⌀,мм/mm" Width="180"/>
-                            <TextBox x:Name="txtDefBottomAs1Count" Width="35"/>
-                            <TextBox x:Name="txtDefBottomAs1Diameter" Width="35"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <Label Content="Верх/Top As1: кол-во/count x ⌀,мм/mm" Width="180"/>
-                            <TextBox x:Name="txtDefTopAs1Count" Width="35"/>
-                            <TextBox x:Name="txtDefTopAs1Diameter" Width="35"/>
-                        </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,0,0,5">
+                <RadioButton x:Name="rbLangRu" Content="RU" GroupName="Lang" Style="{StaticResource LangButtonStyle}"
+                             Checked="LangRu_Checked"/>
+                <RadioButton x:Name="rbLangEn" Content="EN" GroupName="Lang" Style="{StaticResource LangButtonStyle}"
+                             Checked="LangEn_Checked"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal">
+
+                <!-- Имя/номер балки -->
+                <GroupBox x:Name="gbBeam" Header="Балка">
+                    <StackPanel Orientation="Horizontal">
+                        <Label x:Name="lblBeamName" Content="Название:"/>
+                        <TextBox x:Name="txtBeamName" Width="140"/>
                     </StackPanel>
-                    <Button x:Name="btnApplyRebar" Content="Применить ко всем / Apply to all" Width="180" Click="btnApplyRebar_Click"/>
-                </StackPanel>
-            </GroupBox>
-        </StackPanel>
+                </GroupBox>
+
+                <!--
+                    GroupBox "Сечение и привязки по умолчанию": тут задаём ОДНО значение, и
+                    кнопкой "Применить ко всем" раздаём его во ВСЕ строки таблицы пролётов -
+                    это прямой аналог кнопок CommandButton1-4 в старом Excel-инструменте
+                    (BEAMDRAW\Temp\VBA_extracted.txt), которые точно так же копировали одно
+                    введённое число во все столбцы-пролёты.
+                -->
+                <GroupBox x:Name="gbSection" Header="Сечение и привязки по умолчанию">
+                    <StackPanel Orientation="Horizontal">
+                        <Label x:Name="lblB" Content="B, м:"/>
+                        <TextBox x:Name="txtDefaultB" Width="55"/>
+                        <Label x:Name="lblH" Content="H, м:"/>
+                        <TextBox x:Name="txtDefaultH" Width="55"/>
+                        <Label x:Name="lblAs" Content="as, м:"/>
+                        <TextBox x:Name="txtDefaultAs" Width="55"/>
+                        <Label x:Name="lblAi" Content="ai, м:"/>
+                        <TextBox x:Name="txtDefaultAi" Width="55"/>
+                        <Label x:Name="lblDH" Content="dH, м:"/>
+                        <TextBox x:Name="txtDefaultDH" Width="55"/>
+                        <!--
+                            Click="btnApplySection_Click" - когда пользователь нажмёт эту
+                            кнопку, WPF вызовет метод btnApplySection_Click в
+                            BeamDrawWindow.xaml.cs (code-behind). Так и связываются кнопки
+                            в XAML с реальным кодом на C#.
+                        -->
+                        <Button x:Name="btnApplySection" Content="Применить ко всем" Width="150" Click="btnApplySection_Click"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Хомуты - общие на всю балку (не на пролёт), см. BeamData.cs -->
+                <GroupBox x:Name="gbStirrup" Header="Хомуты (на всю балку)">
+                    <StackPanel Orientation="Horizontal">
+                        <Label x:Name="lblStirrupDiameter" Content="⌀, мм:"/>
+                        <TextBox x:Name="txtStirrupDiameter" Width="45"/>
+                        <Label x:Name="lblStirrupGeneral" Content="шаг в пролёте, м:"/>
+                        <TextBox x:Name="txtStirrupSpacingGeneral" Width="55"/>
+                        <Label x:Name="lblStirrupSupport" Content="шаг у опоры, м:"/>
+                        <TextBox x:Name="txtStirrupSpacingSupport" Width="55"/>
+                        <Label x:Name="lblStirrupZone" Content="длина зоны у опоры, м:"/>
+                        <TextBox x:Name="txtStirrupZoneLength" Width="55"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!--
+                    Арматура по умолчанию: то же самое "применить ко всем", но отдельно для
+                    нижней и верхней арматуры (аналог CommandButton5-8 в старом Excel).
+                -->
+                <GroupBox x:Name="gbRebar" Header="Арматура по умолчанию">
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel Orientation="Vertical">
+                            <StackPanel Orientation="Horizontal">
+                                <Label x:Name="lblDefBottom" Content="Низ As1: кол-во x ⌀,мм" Width="150"/>
+                                <TextBox x:Name="txtDefBottomAs1Count" Width="35"/>
+                                <TextBox x:Name="txtDefBottomAs1Diameter" Width="35"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Label x:Name="lblDefTop" Content="Верх As1: кол-во x ⌀,мм" Width="150"/>
+                                <TextBox x:Name="txtDefTopAs1Count" Width="35"/>
+                                <TextBox x:Name="txtDefTopAs1Diameter" Width="35"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Button x:Name="btnApplyRebar" Content="Применить ко всем" Width="150" Click="btnApplyRebar_Click"/>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </DockPanel>
 
         <!-- ==================== СТРОКА 1: Таблица пролётов ==================== -->
         <!--
@@ -184,53 +242,65 @@
                 <!--
                     Binding="{Binding Length}" - берём значение из свойства Length того
                     объекта BeamSpan, который сейчас отображается в этой строке.
-                    Header - подпись столбца, которую видит пользователь.
+                    Header - подпись столбца, которую видит пользователь. У каждого
+                    столбца тоже есть x:Name - DataGridColumn не элемент экрана
+                    (не FrameworkElement), но всё равно объект, и WPF всё равно генерирует
+                    для него поле в code-behind по x:Name, так что мы можем менять его
+                    .Header при переключении языка точно так же, как у Label/GroupBox.
 
                     ConverterCulture=en-US - ВАЖНО: без этого WPF форматирует/парсит
                     дробные числа по РЕГИОНАЛЬНЫМ настройкам Windows - в русской Windows
                     это означает запятую (3,50) вместо точки (3.50). Верхние поля
                     "по умолчанию" в этом окне (txtDefaultB и т.п.) мы сами парсим через
                     ParseD/CultureInfo.InvariantCulture в code-behind (тоже с точкой) -
-                    ConverterCulture нужен, чтобы таблица вела себя ТАК ЖЕ, а не путала
-                    пользователя разным поведением точки/запятой в разных полях окна.
+                    ConverterCulture нужен, чтобы таблица вела себя ТАК ЖЕ.
                 -->
-                <DataGridTextColumn Header="L, м/m" Binding="{Binding Length, ConverterCulture=en-US}" Width="65"/>
-                <DataGridTextColumn Header="as, м/m" Binding="{Binding As, ConverterCulture=en-US}" Width="60"/>
-                <DataGridTextColumn Header="ai, м/m" Binding="{Binding Ai, ConverterCulture=en-US}" Width="60"/>
-                <DataGridTextColumn Header="dH, м/m" Binding="{Binding DH, ConverterCulture=en-US}" Width="60"/>
-                <DataGridTextColumn Header="B, м/m" Binding="{Binding B, ConverterCulture=en-US}" Width="60"/>
-                <DataGridTextColumn Header="H, м/m" Binding="{Binding H, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn x:Name="colLength" Header="L, м" Binding="{Binding Length, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn x:Name="colAs" Header="as, м" Binding="{Binding As, ConverterCulture=en-US}" Width="55"/>
+                <DataGridTextColumn x:Name="colAi" Header="ai, м" Binding="{Binding Ai, ConverterCulture=en-US}" Width="55"/>
+                <DataGridTextColumn x:Name="colDH" Header="dH, м" Binding="{Binding DH, ConverterCulture=en-US}" Width="55"/>
+                <DataGridTextColumn x:Name="colB" Header="B, м" Binding="{Binding B, ConverterCulture=en-US}" Width="55"/>
+                <DataGridTextColumn x:Name="colH" Header="H, м" Binding="{Binding H, ConverterCulture=en-US}" Width="55"/>
 
-                <DataGridTextColumn Header="Низ/Bottom As1 кол-во/cnt" Binding="{Binding BottomAs1Count}" Width="120"/>
-                <DataGridTextColumn Header="Низ/Bottom As1 ⌀,мм/mm" Binding="{Binding BottomAs1Diameter, ConverterCulture=en-US}" Width="115"/>
-                <DataGridTextColumn Header="Низ/Bottom As2 кол-во/cnt" Binding="{Binding BottomAs2Count}" Width="120"/>
-                <DataGridTextColumn Header="Низ/Bottom As2 ⌀,мм/mm" Binding="{Binding BottomAs2Diameter, ConverterCulture=en-US}" Width="115"/>
+                <DataGridTextColumn x:Name="colBottomAs1Count" Header="Низ As1 кол-во" Binding="{Binding BottomAs1Count}" Width="90"/>
+                <DataGridTextColumn x:Name="colBottomAs1Diameter" Header="Низ As1 ⌀,мм" Binding="{Binding BottomAs1Diameter, ConverterCulture=en-US}" Width="85"/>
+                <DataGridTextColumn x:Name="colBottomAs2Count" Header="Низ As2 кол-во" Binding="{Binding BottomAs2Count}" Width="90"/>
+                <DataGridTextColumn x:Name="colBottomAs2Diameter" Header="Низ As2 ⌀,мм" Binding="{Binding BottomAs2Diameter, ConverterCulture=en-US}" Width="85"/>
 
-                <DataGridTextColumn Header="Верх/Top As1 кол-во/cnt" Binding="{Binding TopAs1Count}" Width="115"/>
-                <DataGridTextColumn Header="Верх/Top As1 ⌀,мм/mm" Binding="{Binding TopAs1Diameter, ConverterCulture=en-US}" Width="110"/>
-                <DataGridTextColumn Header="Верх/Top As2 кол-во/cnt" Binding="{Binding TopAs2Count}" Width="115"/>
-                <DataGridTextColumn Header="Верх/Top As2 ⌀,мм/mm" Binding="{Binding TopAs2Diameter, ConverterCulture=en-US}" Width="110"/>
+                <DataGridTextColumn x:Name="colTopAs1Count" Header="Верх As1 кол-во" Binding="{Binding TopAs1Count}" Width="90"/>
+                <DataGridTextColumn x:Name="colTopAs1Diameter" Header="Верх As1 ⌀,мм" Binding="{Binding TopAs1Diameter, ConverterCulture=en-US}" Width="85"/>
+                <DataGridTextColumn x:Name="colTopAs2Count" Header="Верх As2 кол-во" Binding="{Binding TopAs2Count}" Width="90"/>
+                <DataGridTextColumn x:Name="colTopAs2Diameter" Header="Верх As2 ⌀,мм" Binding="{Binding TopAs2Diameter, ConverterCulture=en-US}" Width="85"/>
 
                 <!--
                     DataGridComboBoxColumn - столбец-выпадающий список вместо текстового
-                    поля. ItemsSource берёт варианты из статического списка
-                    BeamSpan.SectionTypes (см. BeamData.cs), SelectedItemBinding
-                    привязывает выбор к свойству SectionType строки.
+                    поля. ItemsSource - ВСЕГДА один и тот же список SectionTypeOptions
+                    (см. BeamData.cs) - он НЕ зависит от языка, там просто пары "ключ +
+                    русское название + английское название". SelectedValuePath="Key" +
+                    SelectedValueBinding="{Binding SectionType}" - в самих данных
+                    (BeamSpan.SectionType) хранится только Key (например "SlabSlab"),
+                    язык-независимый - иначе при переключении языка все уже выбранные
+                    значения в таблице потерялись бы (строка на русском не совпадёт со
+                    строкой на английском). DisplayMemberPath - вот это как раз меняется
+                    при переключении языка (в SetLanguage) между "DisplayRu"/"DisplayEn" -
+                    он говорит, КАКОЕ поле объекта SectionTypeOption показывать в списке.
                 -->
-                <DataGridComboBoxColumn Header="Тип сечения / Section type"
-                                         ItemsSource="{x:Static local:BeamSpan.SectionTypes}"
-                                         SelectedItemBinding="{Binding SectionType}"
-                                         Width="220"/>
+                <DataGridComboBoxColumn x:Name="colSectionType" Header="Тип сечения"
+                                         ItemsSource="{x:Static local:BeamSpan.SectionTypeOptions}"
+                                         SelectedValuePath="Key"
+                                         SelectedValueBinding="{Binding SectionType}"
+                                         DisplayMemberPath="DisplayRu"
+                                         Width="170"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- ==================== СТРОКА 2: Нижняя панель кнопок / Bottom button bar ==================== -->
+        <!-- ==================== СТРОКА 2: Нижняя панель кнопок ==================== -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Label x:Name="lblTotalLength" Content="Суммарная длина / Total length: 0.00 м/m" Margin="0,0,20,0" VerticalAlignment="Center"/>
-            <Button x:Name="btnAddSpan" Content="Добавить пролёт / Add span" Width="160" Click="btnAddSpan_Click"/>
-            <Button x:Name="btnRemoveSpan" Content="Удалить пролёт / Remove span" Width="160" Click="btnRemoveSpan_Click"/>
+            <Label x:Name="lblTotalLength" Content="Суммарная длина: 0.00 м" Margin="0,0,20,0" VerticalAlignment="Center"/>
+            <Button x:Name="btnAddSpan" Content="Добавить пролёт" Width="140" Click="btnAddSpan_Click"/>
+            <Button x:Name="btnRemoveSpan" Content="Удалить пролёт" Width="140" Click="btnRemoveSpan_Click"/>
             <Button x:Name="btnOk" Content="OK" Width="80" IsDefault="True" Click="btnOk_Click"/>
-            <Button x:Name="btnCancel" Content="Отмена / Cancel" Width="110" IsCancel="True" Click="btnCancel_Click"/>
+            <Button x:Name="btnCancel" Content="Отмена" Width="90" IsCancel="True" Click="btnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

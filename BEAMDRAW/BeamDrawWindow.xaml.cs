@@ -26,6 +26,11 @@ namespace BEAMDRAW
         // "можно присвоить только один раз, в конструкторе, дальше не меняется".
         private readonly Beam _beam;
 
+        // Какой язык интерфейса сейчас выбран - false = русский, true = английский.
+        // Не readonly, потому что меняется при каждом клике по кнопке RU/EN
+        // (см. LangRu_Checked/LangEn_Checked ниже).
+        private bool _useEnglish;
+
         // Конструктор - специальный метод, который вызывается при "new BeamDrawWindow(...)".
         // Сюда передаём балку (Beam), с которой окно будет работать - либо новую
         // (для черчения "с нуля"), либо уже заполненную (если потом добавим
@@ -55,6 +60,86 @@ namespace BEAMDRAW
             // иначе после открытия окна они были бы просто пустыми.
             LoadDefaultsIntoFields();
 
+            // rbLangRu.IsChecked = true - выставляем ТУТ, кодом, а не в XAML, потому что
+            // _beam к этому моменту уже присвоен (см. большой комментарий у rbLangRu в
+            // BeamDrawWindow.xaml - если поставить IsChecked="True" прямо в разметке,
+            // событие Checked сработает ДО присвоения _beam и упадёт с
+            // NullReferenceException). Это само по себе вызовет LangRu_Checked ->
+            // SetLanguage(false) -> UpdateTotalLength() - отдельно вызывать их не нужно.
+            rbLangRu.IsChecked = true;
+        }
+
+        // ================================================================================
+        // ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА
+        // ================================================================================
+        // Checked="LangRu_Checked" / "LangEn_Checked" в XAML - эти два метода вызываются,
+        // когда пользователь кликает по кнопке RU или EN (это RadioButton - см.
+        // комментарий у rbLangRu/rbLangEn в XAML). Оба просто вызывают один и тот же
+        // SetLanguage(...) с разным значением.
+        private void LangRu_Checked(object sender, RoutedEventArgs e) => SetLanguage(false);
+        private void LangEn_Checked(object sender, RoutedEventArgs e) => SetLanguage(true);
+
+        // Переключает ВЕСЬ текст окна между русским и английским. Мы не используем
+        // "настоящую" WPF-локализацию (файлы .resx на каждый язык, сателлитные сборки) -
+        // для маленького окна это была бы overkill-сложность; вместо этого просто
+        // держим пары "русский текст / английский текст" прямо тут и присваиваем нужную
+        // половину каждому элементу по его x:Name (см. BeamDrawWindow.xaml - у каждого
+        // Label/GroupBox/Button/DataGridColumn есть x:Name именно для этого).
+        private void SetLanguage(bool english)
+        {
+            _useEnglish = english;
+
+            Title = english ? "BEAMDRAW - Beam/Girder Data Entry" : "BEAMDRAW - Ввод данных балки/ригеля";
+
+            gbBeam.Header = english ? "Beam" : "Балка";
+            lblBeamName.Content = english ? "Name:" : "Название:";
+
+            gbSection.Header = english ? "Default section && cover" : "Сечение и привязки по умолчанию";
+            lblB.Content = english ? "B, m:" : "B, м:";
+            lblH.Content = english ? "H, m:" : "H, м:";
+            lblAs.Content = english ? "as, m:" : "as, м:";
+            lblAi.Content = english ? "ai, m:" : "ai, м:";
+            lblDH.Content = english ? "dH, m:" : "dH, м:";
+            btnApplySection.Content = english ? "Apply to all" : "Применить ко всем";
+
+            gbStirrup.Header = english ? "Stirrups (whole beam)" : "Хомуты (на всю балку)";
+            lblStirrupDiameter.Content = english ? "⌀, mm:" : "⌀, мм:";
+            lblStirrupGeneral.Content = english ? "mid-span step, m:" : "шаг в пролёте, м:";
+            lblStirrupSupport.Content = english ? "support step, m:" : "шаг у опоры, м:";
+            lblStirrupZone.Content = english ? "support zone length, m:" : "длина зоны у опоры, м:";
+
+            gbRebar.Header = english ? "Default reinforcement" : "Арматура по умолчанию";
+            lblDefBottom.Content = english ? "Bottom As1: count x ⌀,mm" : "Низ As1: кол-во x ⌀,мм";
+            lblDefTop.Content = english ? "Top As1: count x ⌀,mm" : "Верх As1: кол-во x ⌀,мм";
+            btnApplyRebar.Content = english ? "Apply to all" : "Применить ко всем";
+
+            colLength.Header = english ? "L, m" : "L, м";
+            colAs.Header = "as, " + (english ? "m" : "м");
+            colAi.Header = "ai, " + (english ? "m" : "м");
+            colDH.Header = "dH, " + (english ? "m" : "м");
+            colB.Header = english ? "B, m" : "B, м";
+            colH.Header = english ? "H, m" : "H, м";
+            colBottomAs1Count.Header = english ? "Bottom As1 count" : "Низ As1 кол-во";
+            colBottomAs1Diameter.Header = english ? "Bottom As1 ⌀,mm" : "Низ As1 ⌀,мм";
+            colBottomAs2Count.Header = english ? "Bottom As2 count" : "Низ As2 кол-во";
+            colBottomAs2Diameter.Header = english ? "Bottom As2 ⌀,mm" : "Низ As2 ⌀,мм";
+            colTopAs1Count.Header = english ? "Top As1 count" : "Верх As1 кол-во";
+            colTopAs1Diameter.Header = english ? "Top As1 ⌀,mm" : "Верх As1 ⌀,мм";
+            colTopAs2Count.Header = english ? "Top As2 count" : "Верх As2 кол-во";
+            colTopAs2Diameter.Header = english ? "Top As2 ⌀,mm" : "Верх As2 ⌀,мм";
+
+            // DisplayMemberPath - какое поле объекта SectionTypeOption показывать в
+            // выпадающем списке (см. подробный комментарий в XAML рядом с colSectionType).
+            colSectionType.Header = english ? "Section type" : "Тип сечения";
+            colSectionType.DisplayMemberPath = english ? "DisplayEn" : "DisplayRu";
+
+            btnAddSpan.Content = english ? "Add span" : "Добавить пролёт";
+            btnRemoveSpan.Content = english ? "Remove span" : "Удалить пролёт";
+            btnCancel.Content = english ? "Cancel" : "Отмена";
+
+            // Суммарная длина зависит от языка ТОЛЬКО подписью ("Total length"/
+            // "Суммарная длина") - само число не меняется, поэтому просто пересчитываем
+            // заново тем же методом, который и так знает про _useEnglish.
             UpdateTotalLength();
         }
 
@@ -183,7 +268,9 @@ namespace BEAMDRAW
         private void UpdateTotalLength()
         {
             double total = _beam.Spans.Sum(s => s.Length);
-            lblTotalLength.Content = $"Суммарная длина / Total length: {total:F2} м/m";
+            lblTotalLength.Content = _useEnglish
+                ? $"Total length: {total:F2} m"
+                : $"Суммарная длина: {total:F2} м";
         }
 
         // Событие DataGrid, которое срабатывает, когда пользователь заканчивает
