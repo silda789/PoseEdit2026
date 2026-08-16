@@ -185,23 +185,31 @@
                     Binding="{Binding Length}" - берём значение из свойства Length того
                     объекта BeamSpan, который сейчас отображается в этой строке.
                     Header - подпись столбца, которую видит пользователь.
+
+                    ConverterCulture=en-US - ВАЖНО: без этого WPF форматирует/парсит
+                    дробные числа по РЕГИОНАЛЬНЫМ настройкам Windows - в русской Windows
+                    это означает запятую (3,50) вместо точки (3.50). Верхние поля
+                    "по умолчанию" в этом окне (txtDefaultB и т.п.) мы сами парсим через
+                    ParseD/CultureInfo.InvariantCulture в code-behind (тоже с точкой) -
+                    ConverterCulture нужен, чтобы таблица вела себя ТАК ЖЕ, а не путала
+                    пользователя разным поведением точки/запятой в разных полях окна.
                 -->
-                <DataGridTextColumn Header="L, м/m" Binding="{Binding Length}" Width="65"/>
-                <DataGridTextColumn Header="as, м/m" Binding="{Binding As}" Width="60"/>
-                <DataGridTextColumn Header="ai, м/m" Binding="{Binding Ai}" Width="60"/>
-                <DataGridTextColumn Header="dH, м/m" Binding="{Binding DH}" Width="60"/>
-                <DataGridTextColumn Header="B, м/m" Binding="{Binding B}" Width="60"/>
-                <DataGridTextColumn Header="H, м/m" Binding="{Binding H}" Width="60"/>
+                <DataGridTextColumn Header="L, м/m" Binding="{Binding Length, ConverterCulture=en-US}" Width="65"/>
+                <DataGridTextColumn Header="as, м/m" Binding="{Binding As, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn Header="ai, м/m" Binding="{Binding Ai, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn Header="dH, м/m" Binding="{Binding DH, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn Header="B, м/m" Binding="{Binding B, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn Header="H, м/m" Binding="{Binding H, ConverterCulture=en-US}" Width="60"/>
 
                 <DataGridTextColumn Header="Низ/Bottom As1 кол-во/cnt" Binding="{Binding BottomAs1Count}" Width="120"/>
-                <DataGridTextColumn Header="Низ/Bottom As1 ⌀,мм/mm" Binding="{Binding BottomAs1Diameter}" Width="115"/>
+                <DataGridTextColumn Header="Низ/Bottom As1 ⌀,мм/mm" Binding="{Binding BottomAs1Diameter, ConverterCulture=en-US}" Width="115"/>
                 <DataGridTextColumn Header="Низ/Bottom As2 кол-во/cnt" Binding="{Binding BottomAs2Count}" Width="120"/>
-                <DataGridTextColumn Header="Низ/Bottom As2 ⌀,мм/mm" Binding="{Binding BottomAs2Diameter}" Width="115"/>
+                <DataGridTextColumn Header="Низ/Bottom As2 ⌀,мм/mm" Binding="{Binding BottomAs2Diameter, ConverterCulture=en-US}" Width="115"/>
 
                 <DataGridTextColumn Header="Верх/Top As1 кол-во/cnt" Binding="{Binding TopAs1Count}" Width="115"/>
-                <DataGridTextColumn Header="Верх/Top As1 ⌀,мм/mm" Binding="{Binding TopAs1Diameter}" Width="110"/>
+                <DataGridTextColumn Header="Верх/Top As1 ⌀,мм/mm" Binding="{Binding TopAs1Diameter, ConverterCulture=en-US}" Width="110"/>
                 <DataGridTextColumn Header="Верх/Top As2 кол-во/cnt" Binding="{Binding TopAs2Count}" Width="115"/>
-                <DataGridTextColumn Header="Верх/Top As2 ⌀,мм/mm" Binding="{Binding TopAs2Diameter}" Width="110"/>
+                <DataGridTextColumn Header="Верх/Top As2 ⌀,мм/mm" Binding="{Binding TopAs2Diameter, ConverterCulture=en-US}" Width="110"/>
 
                 <!--
                     DataGridComboBoxColumn - столбец-выпадающий список вместо текстового
