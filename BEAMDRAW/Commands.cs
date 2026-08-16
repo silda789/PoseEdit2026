@@ -45,25 +45,25 @@ namespace BEAMDRAW
             if (result != true)
             {
                 // Kirillica na komandnoy stroke AutoCAD nenadyozhna (sm. CLAUDE.md /
-                // suschestvuyuschie *N komandy v PoseEdit2026) - poetomu tut translit RU
-                // + angliyskiy tekst, a ne normalnaya kirillica.
-                // Cyrillic on the AutoCAD command line is unreliable - transliterated
-                // RU + English instead.
-                ed.WriteMessage("\nBEAMDRAW: otmeneno polzovatelem. / Cancelled by user.");
+                // suschestvuyuschie *N komandy v PoseEdit2026) - poetomu tut translit RU,
+                // a ne normalnaya kirillica. Ranshe tut byl eshche i angliyskiy tekst
+                // cherez "/" - user poprosil 2026-08-16 ubrat ego iz komandnoy stroki
+                // (dvuyazychnym ostalos tolko samo okno BeamDrawWindow, s pereklyuchatelem).
+                ed.WriteMessage("\nBEAMDRAW: otmeneno polzovatelem.");
                 return;
             }
 
             double totalLength = beam.Spans.Sum(s => s.Length);
-            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov/spans {beam.Spans.Count}, summarnaya dlina/total length {totalLength:F0} mm.");
+            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov {beam.Spans.Count}, summarnaya dlina {totalLength:F0} mm.");
 
             // Спрашиваем у пользователя, ГДЕ на чертеже начать (левый нижний угол ленты
             // балки, ось №1) - стандартный приём AutoCAD-команд "укажи точку".
             PromptPointOptions ppo = new PromptPointOptions(
-                "\nUkazhite tochku vstavki (levyi nizhnii ugol, os 1) / Specify insertion point (bottom-left, axis 1): ");
+                "\nUkazhite tochku vstavki (levyi nizhnii ugol, os 1): ");
             PromptPointResult ppr = ed.GetPoint(ppo);
             if (ppr.Status != PromptStatus.OK)
             {
-                ed.WriteMessage("\nBEAMDRAW: vstavka otmenena. / Insertion cancelled.");
+                ed.WriteMessage("\nBEAMDRAW: vstavka otmenena.");
                 return;
             }
 
@@ -75,7 +75,7 @@ namespace BEAMDRAW
                 BeamDrawer.DrawSkeleton(db, beam, ppr.Value);
             }
 
-            ed.WriteMessage("\nBEAMDRAW: skelet balki postroen (bez armatury - metodika eshche ne opisana). / Beam skeleton drawn (no reinforcement yet - methodology not described yet).");
+            ed.WriteMessage("\nBEAMDRAW: skelet balki postroen (bez armatury - metodika eshche ne opisana).");
         }
     }
 }

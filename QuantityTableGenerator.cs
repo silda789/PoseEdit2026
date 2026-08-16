@@ -112,12 +112,12 @@ namespace PoseEdit2026
                 SelectionFilter filter = new SelectionFilter(filterList);
 
                 PromptSelectionOptions selOpts = new PromptSelectionOptions();
-                selOpts.MessageForAdding = "\nSelect RL-POS blocks: ";
+                selOpts.MessageForAdding = "\nVyberite bloki RL-POS: ";
 
                 PromptSelectionResult selRes = ed.GetSelection(selOpts, filter);
                 if (selRes.Status != PromptStatus.OK)
                 {
-                    ed.WriteMessage("\nNo blocks selected.");
+                    ed.WriteMessage("\nBloki ne vybrany.");
                     return;
                 }
 
@@ -137,7 +137,7 @@ namespace PoseEdit2026
 
                 // Запрашиваем точку размещения таблиц
                 Application.SetSystemVariable("OSMODE", 0);
-                PromptPointOptions ptOpts = new PromptPointOptions("\nPlacement point for tables: ");
+                PromptPointOptions ptOpts = new PromptPointOptions("\nTochka razmescheniya tablic: ");
                 PromptPointResult ptRes = ed.GetPoint(ptOpts);
 
                 if (ptRes.Status != PromptStatus.OK)
@@ -168,11 +168,11 @@ namespace PoseEdit2026
                 if (oldDimZin != null) Application.SetSystemVariable("DIMZIN", oldDimZin);
                 Application.SetSystemVariable("CMDECHO", 1);
 
-                ed.WriteMessage("\nTables created successfully.");
+                ed.WriteMessage("\nTablicy uspeshno sozdany.");
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nError: {ex.Message}");
+                ed.WriteMessage($"\nOshibka: {ex.Message}");
             }
         }
 
@@ -812,7 +812,7 @@ namespace PoseEdit2026
             }
             catch (System.Exception ex)
             {
-                Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"\nError writing validation log: {ex.Message}");
+                Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"\nOshibka zapisi zhurnala proverki: {ex.Message}");
             }
             finally
             {

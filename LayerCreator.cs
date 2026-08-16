@@ -84,7 +84,7 @@ namespace PoseEdit2026
                     
                     if (settings == null)
                     {
-                        ed.WriteMessage("\nLayer creation cancelled.");
+                        ed.WriteMessage("\nSozdanie sloev otmeneno.");
                         return;
                     }
 
@@ -92,58 +92,58 @@ namespace PoseEdit2026
                     Document currentDoc = Application.DocumentManager.MdiActiveDocument;
                     if (currentDoc == null)
                     {
-                        ed.WriteMessage("\nNo document is open.");
+                        ed.WriteMessage("\nNet otkrytogo dokumenta.");
                         return;
                     }
                     Database db = currentDoc.Database;
 
                     // Создаем слои
                     LayerCreationResult result = CreateLayers(db, settings);
-                    
+
                     // Детальное сообщение о результатах
                     if (result.SuccessCount > 0)
                     {
-                        string message = $"\nSuccessfully processed {result.SuccessCount} layer(s):";
+                        string message = $"\nObrabotano sloev: {result.SuccessCount}:";
                         if (result.Created > 0)
-                            message += $" {result.Created} created";
+                            message += $" sozdano {result.Created}";
                         if (result.Updated > 0)
-                            message += $" {result.Updated} updated";
+                            message += $" obnovleno {result.Updated}";
                         if (result.Skipped > 0)
-                            message += $" {result.Skipped} skipped (already exist)";
+                            message += $" propuscheno {result.Skipped} (uzhe sushchestvuyut)";
                         if (result.Errors > 0)
-                            message += $" {result.Errors} errors";
-                        message += $" out of {result.Total} selected.";
+                            message += $" oshibok {result.Errors}";
+                        message += $" iz {result.Total} vybrannyh.";
                         ed.WriteMessage(message);
                     }
                     else
                     {
                         if (result.Total == 0)
                         {
-                            ed.WriteMessage("\nNo layers were selected.");
+                            ed.WriteMessage("\nSloi ne vybrany.");
                         }
                         else if (result.Skipped > 0 && settings.SkipExisting)
                         {
-                            ed.WriteMessage($"\nNo layers were created. All {result.Total} selected layer(s) already exist (Skip existing = ON).");
-                            ed.WriteMessage("\nTip: Uncheck 'Skip existing layers' to update existing layers.");
+                            ed.WriteMessage($"\nSloi ne sozdany. Vse {result.Total} vybrannyh sloya(ev) uzhe sushchestvuyut (Skip existing = ON).");
+                            ed.WriteMessage("\nSovet: snimite galochku 'Skip existing layers', chtoby obnovit sushchestvuyushchie sloi.");
                         }
                         else if (result.Errors > 0)
                         {
-                            ed.WriteMessage($"\nFailed to process layers. {result.Errors} error(s) occurred.");
+                            ed.WriteMessage($"\nNe udalos obrabotat sloi. Oshibok: {result.Errors}.");
                         }
                         else
                         {
-                            ed.WriteMessage($"\nNo layers were processed. Check your settings.");
+                            ed.WriteMessage($"\nNi odin sloi ne obrabotan. Proverte nastroiki.");
                         }
                     }
                 }
                 else
                 {
-                    ed.WriteMessage("\nLayer creation cancelled.");
+                    ed.WriteMessage("\nSozdanie sloev otmeneno.");
                 }
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nError creating layers: {ex.Message}");
+                ed.WriteMessage($"\nOshibka pri sozdanii sloev: {ex.Message}");
                 Application.ShowAlertDialog($"Error creating layers:\n{ex.Message}");
             }
         }
