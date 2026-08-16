@@ -280,5 +280,84 @@ namespace PoseEdit2026
                 ed.WriteMessage($"\nGotovo. Pereimenovano listov: {renamed}, propushcheno: {skipped}, nachinaya s {start}.");
             }
         }
+
+        // ====================================================================================
+        // КОМАНДА: VPLOCKALL — заблокировать масштаб всех видовых экранов на всех листах
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: проходит по всем листам (Layout, кроме "Model"). На каждом листе
+        // находит все "плавающие" видовые экраны (Viewport) и для каждого из них
+        // проверяет свойство Locked (это то же самое, что команда AutoCAD "VPLOCK" или
+        // пункт правой кнопки мыши на границе видового экрана "Display Locked" -> "Yes").
+        // Если видовой экран ещё НЕ заблокирован - блокирует. Уже заблокированные не
+        // трогает (чтобы не создавать лишних записей в истории отмены - Undo).
+        //
+        // ПОЧЕМУ ПРОВЕРЯЕМ Number <= 1: у КАЖДОГО листа AutoCAD сам создаёт один
+        // служебный видовой экран - тот, что представляет сам лист бумаги (это НЕ то,
+        // что пользователь считает "видовым экраном" на чертеже). У него Number всегда
+        // равен 1. "Настоящие" видовые экраны, которые вставил пользователь, имеют
+        // Number 2 и выше. Если не пропускать Number == 1, команда будет пытаться
+        // "заблокировать" сам лист бумаги, что не имеет смысла.
+        [CommandMethod("VPLOCKALL")]
+        public static void LockAllViewportsCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            using (doc.LockDocument())
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                DBDictionary layoutDict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+
+                int totalViewports = 0;
+                int alreadyLocked = 0;
+                int newlyLocked = 0;
+
+                // Обходим все листы...
+                foreach (DBDictionaryEntry entry in layoutDict)
+                {
+                    Layout layout = tr.GetObject(entry.Value, OpenMode.ForRead) as Layout;
+                    if (layout == null || layout.ModelType) continue; // пропускаем "Model"
+
+                    // Layout.BlockTableRecordId - это "содержимое" листа (все объекты,
+                    // нарисованные на этом конкретном листе, включая видовые экраны) -
+                    // тот же приём, что и с обычным ModelSpace, просто для другого листа.
+                    BlockTableRecord layoutBtr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+
+                    // ...и все объекты внутри каждого листа, отбирая среди них только
+                    // видовые экраны (остальное - линии, тексты, штампы и т.п. - нам
+                    // тут не нужно, "as Viewport" вернёт null для всего, что не Viewport,
+                    // и мы просто пропустим такой объект через "continue").
+                    foreach (ObjectId entId in layoutBtr)
+                    {
+                        Viewport vp = tr.GetObject(entId, OpenMode.ForRead) as Viewport;
+                        if (vp == null) continue;
+                        if (vp.Number <= 1) continue; // служебный "лист бумаги" - не трогаем
+
+                        totalViewports++;
+
+                        if (vp.Locked)
+                        {
+                            alreadyLocked++;
+                            continue;
+                        }
+
+                        // UpgradeOpen() - "переоткрывает" уже открытый на чтение (ForRead)
+                        // объект на запись (ForWrite), не читая его из базы заново. Делаем
+                        // это только для видовых экранов, которые ДЕЙСТВИТЕЛЬНО нужно
+                        // менять - так уже заблокированные видовые экраны вообще не
+                        // трогаются транзакцией.
+                        vp.UpgradeOpen();
+                        vp.Locked = true;
+                        newlyLocked++;
+                    }
+                }
+
+                tr.Commit();
+
+                ed.WriteMessage($"\nVPLOCKALL: vsego vidovyh ekranov {totalViewports}, uzhe bylo zablokirovano {alreadyLocked}, zablokirovano seichas {newlyLocked}.");
+            }
+        }
     }
 }

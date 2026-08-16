@@ -65,6 +65,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `POZSILN` | `LegacyCommands.ClearPozCommand` | Reset POZ to `0` on selected RL-POS blocks (undo of POZVERN's numbering) | `pozsil` |
 | `LAYSHIFT` | `RoutineCommands.ShiftLayoutNumbersCommand` | Renumber every numbered Layout tab by a constant offset (e.g. all 55-199 -> 66-211) | — |
 | `LAYRENUM` | `RoutineCommands.RenumberLayoutsSequentiallyCommand` | Renumber every numbered Layout tab sequentially from a given start value, in tab order (e.g. start=55 -> 55,56,57,...) | — |
+| `VPLOCKALL` | `RoutineCommands.LockAllViewportsCommand` | Lock every floating viewport (VPLOCK) on every Layout that isn't already locked | — |
 
 ### Not ported
 
