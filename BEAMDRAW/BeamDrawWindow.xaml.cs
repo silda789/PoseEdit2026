@@ -95,30 +95,30 @@ namespace BEAMDRAW
             lblBeamName.Content = english ? "Name:" : "Название:";
 
             gbSection.Header = english ? "Default section && cover" : "Сечение и привязки по умолчанию";
-            lblB.Content = english ? "B, m:" : "B, м:";
-            lblH.Content = english ? "H, m:" : "H, м:";
-            lblAs.Content = english ? "as, m:" : "as, м:";
-            lblAi.Content = english ? "ai, m:" : "ai, м:";
-            lblDH.Content = english ? "dH, m:" : "dH, м:";
+            lblB.Content = english ? "B, mm:" : "B, мм:";
+            lblH.Content = english ? "H, mm:" : "H, мм:";
+            lblAs.Content = english ? "as, mm:" : "as, мм:";
+            lblAi.Content = english ? "ai, mm:" : "ai, мм:";
+            lblDH.Content = english ? "dH, mm:" : "dH, мм:";
             btnApplySection.Content = english ? "Apply to all" : "Применить ко всем";
 
             gbStirrup.Header = english ? "Stirrups (whole beam)" : "Хомуты (на всю балку)";
             lblStirrupDiameter.Content = english ? "⌀, mm:" : "⌀, мм:";
-            lblStirrupGeneral.Content = english ? "mid-span step, m:" : "шаг в пролёте, м:";
-            lblStirrupSupport.Content = english ? "support step, m:" : "шаг у опоры, м:";
-            lblStirrupZone.Content = english ? "support zone length, m:" : "длина зоны у опоры, м:";
+            lblStirrupGeneral.Content = english ? "mid-span step, mm:" : "шаг в пролёте, мм:";
+            lblStirrupSupport.Content = english ? "support step, mm:" : "шаг у опоры, мм:";
+            lblStirrupZone.Content = english ? "support zone length, mm:" : "длина зоны у опоры, мм:";
 
             gbRebar.Header = english ? "Default reinforcement" : "Арматура по умолчанию";
             lblDefBottom.Content = english ? "Bottom As1: count x ⌀,mm" : "Низ As1: кол-во x ⌀,мм";
             lblDefTop.Content = english ? "Top As1: count x ⌀,mm" : "Верх As1: кол-во x ⌀,мм";
             btnApplyRebar.Content = english ? "Apply to all" : "Применить ко всем";
 
-            colLength.Header = english ? "L, m" : "L, м";
-            colAs.Header = "as, " + (english ? "m" : "м");
-            colAi.Header = "ai, " + (english ? "m" : "м");
-            colDH.Header = "dH, " + (english ? "m" : "м");
-            colB.Header = english ? "B, m" : "B, м";
-            colH.Header = english ? "H, m" : "H, м";
+            colLength.Header = english ? "L, mm" : "L, мм";
+            colAs.Header = "as, " + (english ? "mm" : "мм");
+            colAi.Header = "ai, " + (english ? "mm" : "мм");
+            colDH.Header = "dH, " + (english ? "mm" : "мм");
+            colB.Header = english ? "B, mm" : "B, мм";
+            colH.Header = english ? "H, mm" : "H, мм";
             colBottomAs1Count.Header = english ? "Bottom As1 count" : "Низ As1 кол-во";
             colBottomAs1Diameter.Header = english ? "Bottom As1 ⌀,mm" : "Низ As1 ⌀,мм";
             colBottomAs2Count.Header = english ? "Bottom As2 count" : "Низ As2 кол-во";
@@ -263,14 +263,16 @@ namespace BEAMDRAW
         }
 
         // Пересчитывает и показывает суммарную длину балки (сумма Length по всем
-        // пролётам) - вызывается после любого изменения, которое может повлиять на
-        // длину: добавление/удаление пролёта, редактирование ячейки "L, м".
+        // пролётам, в мм) - вызывается после любого изменения, которое может повлиять
+        // на длину: добавление/удаление пролёта, редактирование ячейки "L, мм".
+        // "F0" вместо "F2" - в миллиметрах дробная часть обычно не нужна (в отличие от
+        // метров, где 3.50 м имело смысл, 3500.50 мм - уже нет).
         private void UpdateTotalLength()
         {
             double total = _beam.Spans.Sum(s => s.Length);
             lblTotalLength.Content = _useEnglish
-                ? $"Total length: {total:F2} m"
-                : $"Суммарная длина: {total:F2} м";
+                ? $"Total length: {total:F0} mm"
+                : $"Суммарная длина: {total:F0} мм";
         }
 
         // Событие DataGrid, которое срабатывает, когда пользователь заканчивает

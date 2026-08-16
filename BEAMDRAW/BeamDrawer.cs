@@ -20,10 +20,11 @@ namespace BEAMDRAW
     public static class BeamDrawer
     {
         // "const" - число, которое никогда не меняется во время работы программы (в
-        // отличие от обычной переменной). Все размеры тут - в МИЛЛИМЕТРАХ (мм), потому
-        // что окно ввода данных собирает всё в МЕТРАХ (м) - см. BeamData.cs - а чертежи
-        // в этом офисе обычно ведутся в мм (как и остальной PoseEdit2026), поэтому при
-        // черчении переводим м -> мм умножением на 1000 (см. ниже, span.Length * 1000.0).
+        // отличие от обычной переменной). Все размеры тут - в МИЛЛИМЕТРАХ (мм) - и
+        // окно ввода данных (BeamData.cs) тоже теперь собирает всё в мм, так что здесь
+        // никакого перевода единиц делать не нужно (раньше, пока окно работало в
+        // метрах, тут был умножитель *1000.0 - убран 2026-08-16 по просьбе пользователя,
+        // см. [[session_handoff]]).
 
         // Высота "ленты" балки на чертеже - СХЕМАТИЧНАЯ, не в масштабе с реальным H
         // (в старом Excel-инструменте лента тоже была одной высоты для всех пролётов,
@@ -79,7 +80,7 @@ namespace BEAMDRAW
                 // ОСИ №(i+1). Если пролётов N, то осей всегда N+1.
                 var axisX = new List<double> { 0 };
                 foreach (var span in beam.Spans)
-                    axisX.Add(axisX[axisX.Count - 1] + span.Length * 1000.0);
+                    axisX.Add(axisX[axisX.Count - 1] + span.Length);
 
                 double totalLength = axisX[axisX.Count - 1];
 
@@ -177,12 +178,12 @@ namespace BEAMDRAW
 
             // "L=3.00" над размерной линией, "0.25 x 0.60" под ней - как в скриншотах
             // старого инструмента (BEAMDRAW\Temp\screenshots).
-            DBText lengthText = MakeText($"L={span.Length:F2}", new Point3d(midX, y + TextHeight * 0.3, 0), TextHeight);
+            DBText lengthText = MakeText($"L={span.Length:F0}", new Point3d(midX, y + TextHeight * 0.3, 0), TextHeight);
             lengthText.HorizontalMode = TextHorizontalMode.TextCenter;
             lengthText.AlignmentPoint = lengthText.Position;
             AddEntity(tr, ms, lengthText);
 
-            DBText sectionText = MakeText($"{span.B:F2} x {span.H:F2}", new Point3d(midX, y - TextHeight * 1.5, 0), TextHeight);
+            DBText sectionText = MakeText($"{span.B:F0} x {span.H:F0}", new Point3d(midX, y - TextHeight * 1.5, 0), TextHeight);
             sectionText.HorizontalMode = TextHorizontalMode.TextCenter;
             sectionText.AlignmentPoint = sectionText.Position;
             AddEntity(tr, ms, sectionText);

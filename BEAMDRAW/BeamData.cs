@@ -28,17 +28,19 @@ namespace BEAMDRAW
         // новое значение". Это позволяет WPF-таблице (DataGrid) напрямую читать и
         // менять эти поля, когда пользователь печатает в ячейке.
         //
-        // "L" - длина пролёта, м (в старом Excel - колонка Li).
+        // "L" - длина пролёта, ММ (в старом Excel было в метрах - колонка Li; тут везде
+        // миллиметры, как принято в остальном PoseEdit2026, по просьбе пользователя
+        // 2026-08-16 - см. [[session_handoff]]).
         public double Length { get; set; }
 
-        // "as" / "ai" - привязки/отступы у левой и правой опоры пролёта, м.
+        // "as" / "ai" - привязки/отступы у левой и правой опоры пролёта, мм.
         public double As { get; set; }
         public double Ai { get; set; }
 
-        // "dH" - перепад высоты сечения (для уступов балки), м. Обычно 0.
+        // "dH" - перепад высоты сечения (для уступов балки), мм. Обычно 0.
         public double DH { get; set; }
 
-        // Сечение пролёта B x H, м. По умолчанию берётся из Beam.DefaultB/DefaultH.
+        // Сечение пролёта B x H, мм. По умолчанию берётся из Beam.DefaultB/DefaultH.
         public double B { get; set; }
         public double H { get; set; }
 
@@ -103,18 +105,18 @@ namespace BEAMDRAW
 
         // Хомуты - общие на всю балку (в старом Excel это тоже было одно значение на
         // всю балку, не на пролёт): диаметр, шаг "в пролёте" и шаг "у опоры" на длине
-        // StirrupSupportZoneLength от каждой опоры.
+        // StirrupSupportZoneLength от каждой опоры. Всё в ММ.
         public double StirrupDiameter { get; set; } = 8;
-        public double StirrupSpacingGeneral { get; set; } = 0.200;
-        public double StirrupSpacingSupport { get; set; } = 0.150;
-        public double StirrupSupportZoneLength { get; set; } = 1.20;
+        public double StirrupSpacingGeneral { get; set; } = 200;
+        public double StirrupSpacingSupport { get; set; } = 150;
+        public double StirrupSupportZoneLength { get; set; } = 1200;
 
-        // Значения по умолчанию для новых пролётов и для кнопок "Применить ко всем".
-        public double DefaultB { get; set; } = 0.25;
-        public double DefaultH { get; set; } = 0.60;
-        public double DefaultAs { get; set; } = 0.25;
-        public double DefaultAi { get; set; } = 0.25;
-        public double DefaultDH { get; set; } = 0.00;
+        // Значения по умолчанию для новых пролётов и для кнопок "Применить ко всем". Мм.
+        public double DefaultB { get; set; } = 250;
+        public double DefaultH { get; set; } = 600;
+        public double DefaultAs { get; set; } = 250;
+        public double DefaultAi { get; set; } = 250;
+        public double DefaultDH { get; set; } = 0;
 
         public int DefaultBottomAs1Count { get; set; } = 2;
         public double DefaultBottomAs1Diameter { get; set; } = 12;
@@ -139,7 +141,7 @@ namespace BEAMDRAW
         {
             return new BeamSpan
             {
-                Length = 3.00,
+                Length = 3000,
                 As = DefaultAs,
                 Ai = DefaultAi,
                 DH = DefaultDH,

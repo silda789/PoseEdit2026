@@ -54,7 +54,7 @@ namespace BEAMDRAW
             }
 
             double totalLength = beam.Spans.Sum(s => s.Length);
-            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov/spans {beam.Spans.Count}, summarnaya dlina/total length {totalLength:F2} m.");
+            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': proletov/spans {beam.Spans.Count}, summarnaya dlina/total length {totalLength:F0} mm.");
 
             // Спрашиваем у пользователя, ГДЕ на чертеже начать (левый нижний угол ленты
             // балки, ось №1) - стандартный приём AutoCAD-команд "укажи точку".

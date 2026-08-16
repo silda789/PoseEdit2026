@@ -155,15 +155,15 @@
                 -->
                 <GroupBox x:Name="gbSection" Header="Сечение и привязки по умолчанию">
                     <StackPanel Orientation="Horizontal">
-                        <Label x:Name="lblB" Content="B, м:"/>
+                        <Label x:Name="lblB" Content="B, мм:"/>
                         <TextBox x:Name="txtDefaultB" Width="55"/>
-                        <Label x:Name="lblH" Content="H, м:"/>
+                        <Label x:Name="lblH" Content="H, мм:"/>
                         <TextBox x:Name="txtDefaultH" Width="55"/>
-                        <Label x:Name="lblAs" Content="as, м:"/>
+                        <Label x:Name="lblAs" Content="as, мм:"/>
                         <TextBox x:Name="txtDefaultAs" Width="55"/>
-                        <Label x:Name="lblAi" Content="ai, м:"/>
+                        <Label x:Name="lblAi" Content="ai, мм:"/>
                         <TextBox x:Name="txtDefaultAi" Width="55"/>
-                        <Label x:Name="lblDH" Content="dH, м:"/>
+                        <Label x:Name="lblDH" Content="dH, мм:"/>
                         <TextBox x:Name="txtDefaultDH" Width="55"/>
                         <!--
                             Click="btnApplySection_Click" - когда пользователь нажмёт эту
@@ -180,11 +180,11 @@
                     <StackPanel Orientation="Horizontal">
                         <Label x:Name="lblStirrupDiameter" Content="⌀, мм:"/>
                         <TextBox x:Name="txtStirrupDiameter" Width="45"/>
-                        <Label x:Name="lblStirrupGeneral" Content="шаг в пролёте, м:"/>
+                        <Label x:Name="lblStirrupGeneral" Content="шаг в пролёте, мм:"/>
                         <TextBox x:Name="txtStirrupSpacingGeneral" Width="55"/>
-                        <Label x:Name="lblStirrupSupport" Content="шаг у опоры, м:"/>
+                        <Label x:Name="lblStirrupSupport" Content="шаг у опоры, мм:"/>
                         <TextBox x:Name="txtStirrupSpacingSupport" Width="55"/>
-                        <Label x:Name="lblStirrupZone" Content="длина зоны у опоры, м:"/>
+                        <Label x:Name="lblStirrupZone" Content="длина зоны у опоры, мм:"/>
                         <TextBox x:Name="txtStirrupZoneLength" Width="55"/>
                     </StackPanel>
                 </GroupBox>
@@ -255,12 +255,12 @@
                     ParseD/CultureInfo.InvariantCulture в code-behind (тоже с точкой) -
                     ConverterCulture нужен, чтобы таблица вела себя ТАК ЖЕ.
                 -->
-                <DataGridTextColumn x:Name="colLength" Header="L, м" Binding="{Binding Length, ConverterCulture=en-US}" Width="60"/>
-                <DataGridTextColumn x:Name="colAs" Header="as, м" Binding="{Binding As, ConverterCulture=en-US}" Width="55"/>
-                <DataGridTextColumn x:Name="colAi" Header="ai, м" Binding="{Binding Ai, ConverterCulture=en-US}" Width="55"/>
-                <DataGridTextColumn x:Name="colDH" Header="dH, м" Binding="{Binding DH, ConverterCulture=en-US}" Width="55"/>
-                <DataGridTextColumn x:Name="colB" Header="B, м" Binding="{Binding B, ConverterCulture=en-US}" Width="55"/>
-                <DataGridTextColumn x:Name="colH" Header="H, м" Binding="{Binding H, ConverterCulture=en-US}" Width="55"/>
+                <DataGridTextColumn x:Name="colLength" Header="L, мм" Binding="{Binding Length, ConverterCulture=en-US}" Width="65"/>
+                <DataGridTextColumn x:Name="colAs" Header="as, мм" Binding="{Binding As, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn x:Name="colAi" Header="ai, мм" Binding="{Binding Ai, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn x:Name="colDH" Header="dH, мм" Binding="{Binding DH, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn x:Name="colB" Header="B, мм" Binding="{Binding B, ConverterCulture=en-US}" Width="60"/>
+                <DataGridTextColumn x:Name="colH" Header="H, мм" Binding="{Binding H, ConverterCulture=en-US}" Width="60"/>
 
                 <DataGridTextColumn x:Name="colBottomAs1Count" Header="Низ As1 кол-во" Binding="{Binding BottomAs1Count}" Width="90"/>
                 <DataGridTextColumn x:Name="colBottomAs1Diameter" Header="Низ As1 ⌀,мм" Binding="{Binding BottomAs1Diameter, ConverterCulture=en-US}" Width="85"/>
@@ -296,7 +296,7 @@
 
         <!-- ==================== СТРОКА 2: Нижняя панель кнопок ==================== -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Label x:Name="lblTotalLength" Content="Суммарная длина: 0.00 м" Margin="0,0,20,0" VerticalAlignment="Center"/>
+            <Label x:Name="lblTotalLength" Content="Суммарная длина: 0 мм" Margin="0,0,20,0" VerticalAlignment="Center"/>
             <Button x:Name="btnAddSpan" Content="Добавить пролёт" Width="140" Click="btnAddSpan_Click"/>
             <Button x:Name="btnRemoveSpan" Content="Удалить пролёт" Width="140" Click="btnRemoveSpan_Click"/>
             <Button x:Name="btnOk" Content="OK" Width="80" IsDefault="True" Click="btnOk_Click"/>
