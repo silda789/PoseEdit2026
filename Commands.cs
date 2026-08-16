@@ -98,7 +98,7 @@ namespace PoseEdit2026
 
                 // Настройки запроса
                 PromptSelectionOptions selOpts = new PromptSelectionOptions();
-                selOpts.MessageForAdding = "\nVyberite poziciyu (RL-POS ili RL-POS2) ili Enter dlya novoy: ";
+                selOpts.MessageForAdding = "\nSelect position (RL-POS or RL-POS2) or press Enter for new: ";
                 selOpts.SingleOnly = true; // Разрешаем выбрать только один объект за раз
 
                 // Просим пользователя выбрать
@@ -117,7 +117,7 @@ namespace PoseEdit2026
                     isNewBlock = true;
 
                     // Спрашиваем точку вставки
-                    PromptPointOptions ptOpts = new PromptPointOptions("\nTochka vstavki dlya novoy pozicii: ");
+                    PromptPointOptions ptOpts = new PromptPointOptions("\nInsertion point for new position: ");
                     PromptPointResult ptRes = ed.GetPoint(ptOpts);
 
                     // Если пользователь нажал Esc — прерываем команду
@@ -136,7 +136,7 @@ namespace PoseEdit2026
                     // Если метод вернул Null, значит произошла ошибка (например, неправильное имя ресурса)
                     if (blockId == ObjectId.Null)
                     {
-                        ed.WriteMessage("\nOshibka: ne udalos zagruzit blok iz resursov DLL.");
+                        ed.WriteMessage("\nError: Failed to load block from DLL resources.");
                         return;
                     }
                 }
@@ -181,7 +181,7 @@ namespace PoseEdit2026
             catch (System.Exception ex)
             {
                 // Ловим любые неожиданные ошибки и пишем их в командную строку
-                ed.WriteMessage("\nKriticheskaya oshibka: " + ex.Message);
+                ed.WriteMessage("\nCritical error: " + ex.Message);
             }
             finally
             {

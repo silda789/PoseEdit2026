@@ -50,7 +50,7 @@ namespace PoseEdit2026
             Database db = doc.Database;
 
             PromptIntegerOptions shiftOpts = new PromptIntegerOptions(
-                "\nNa skolko sdvinut nomera listov (naprimer 11, ili -5): ")
+                "\nShift layout numbers by (e.g. 11, or -5): ")
             {
                 AllowNegative = true,
                 AllowZero = false
@@ -85,7 +85,7 @@ namespace PoseEdit2026
 
                 if (items.Count == 0)
                 {
-                    ed.WriteMessage("\nListov s chislom v imeni ne naideno.");
+                    ed.WriteMessage("\nNo layouts with a number in their name found.");
                     return;
                 }
 
@@ -107,7 +107,7 @@ namespace PoseEdit2026
                         int newNumber = it.Number + shift;
                         if (newNumber <= 0)
                         {
-                            ed.WriteMessage($"\nPropushen list '{it.OldName}': novyi nomer {newNumber} <= 0.");
+                            ed.WriteMessage($"\nSkipped layout '{it.OldName}': new number {newNumber} <= 0.");
                             skipped++;
                             continue;
                         }
@@ -127,7 +127,7 @@ namespace PoseEdit2026
                         }
                         catch (System.Exception ex)
                         {
-                            ed.WriteMessage($"\nNe udalos pereimenovat '{it.OldName}' -> '{newName}': {ex.Message}");
+                            ed.WriteMessage($"\nFailed to rename '{it.OldName}' -> '{newName}': {ex.Message}");
                             skipped++;
                         }
                     }
@@ -143,7 +143,7 @@ namespace PoseEdit2026
                     catch (System.Exception) { /* лист удалён/недоступен - остаёмся на Model */ }
                 }
 
-                ed.WriteMessage($"\nGotovo. Pereimenovano listov: {renamed}, propushcheno: {skipped}.");
+                ed.WriteMessage($"\nDone. Layouts renamed: {renamed}, skipped: {skipped}.");
             }
         }
 
@@ -178,7 +178,7 @@ namespace PoseEdit2026
             Database db = doc.Database;
 
             PromptIntegerOptions startOpts = new PromptIntegerOptions(
-                "\nS kakogo nomera nachat perenumeratsiyu listov: ")
+                "\nStart layout renumbering from: ")
             {
                 AllowNegative = false,
                 AllowZero = true
@@ -211,7 +211,7 @@ namespace PoseEdit2026
 
                 if (items.Count == 0)
                 {
-                    ed.WriteMessage("\nListov s chislom v imeni ne naideno.");
+                    ed.WriteMessage("\nNo layouts with a number in their name found.");
                     return;
                 }
 
@@ -246,7 +246,7 @@ namespace PoseEdit2026
                         }
                         catch (System.Exception ex)
                         {
-                            ed.WriteMessage($"\nNe udalos nachat pereimenovanie '{it.OldName}': {ex.Message}");
+                            ed.WriteMessage($"\nFailed to start renaming '{it.OldName}': {ex.Message}");
                             skipped++;
                         }
                     }
@@ -263,7 +263,7 @@ namespace PoseEdit2026
                         }
                         catch (System.Exception ex)
                         {
-                            ed.WriteMessage($"\nList '{it.OldName}' ostalsya s vremennym imenem '{tempName}' - pereimenovat v '{finalName}' ne udalos: {ex.Message}");
+                            ed.WriteMessage($"\nLayout '{it.OldName}' is stuck with temp name '{tempName}' - failed to rename to '{finalName}': {ex.Message}");
                             skipped++;
                         }
                     }
@@ -277,7 +277,7 @@ namespace PoseEdit2026
                     catch (System.Exception) { /* лист удалён/недоступен - остаёмся на Model */ }
                 }
 
-                ed.WriteMessage($"\nGotovo. Pereimenovano listov: {renamed}, propushcheno: {skipped}, nachinaya s {start}.");
+                ed.WriteMessage($"\nDone. Layouts renamed: {renamed}, skipped: {skipped}, starting from {start}.");
             }
         }
 
@@ -364,7 +364,7 @@ namespace PoseEdit2026
 
                 tr.Commit();
 
-                ed.WriteMessage($"\nVPLOCKALL: vsego vidovyh ekranov {totalViewports}, uzhe bylo zablokirovano {alreadyLocked}, zablokirovano seichas {newlyLocked}.");
+                ed.WriteMessage($"\nVPLOCKALL: total viewports {totalViewports}, already locked {alreadyLocked}, locked now {newlyLocked}.");
             }
         }
     }

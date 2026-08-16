@@ -709,8 +709,8 @@ namespace PoseEdit2026
             try
             {
                 Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
-                PromptEntityOptions opt = new PromptEntityOptions("\nVyberite liniyu ili razmer:");
-                opt.SetRejectMessage("\nNevernyi obekt.");
+                PromptEntityOptions opt = new PromptEntityOptions("\nSelect Line or Dimension:");
+                opt.SetRejectMessage("\nInvalid object.");
                 opt.AddAllowedClass(typeof(Line), true);
                 opt.AddAllowedClass(typeof(Polyline), true);
                 opt.AddAllowedClass(typeof(Dimension), true);
@@ -773,8 +773,8 @@ namespace PoseEdit2026
             try
             {
                 Editor ed = App.DocumentManager.MdiActiveDocument.Editor;
-                PromptEntityOptions opt = new PromptEntityOptions("\nVyberite polyliniyu:");
-                opt.SetRejectMessage("\nNevernyi obekt.");
+                PromptEntityOptions opt = new PromptEntityOptions("\nSelect polyline:");
+                opt.SetRejectMessage("\nInvalid object.");
                 opt.AddAllowedClass(typeof(Polyline), true);
                 opt.AddAllowedClass(typeof(Line), true);
 
@@ -904,7 +904,7 @@ namespace PoseEdit2026
                 var filter = new SelectionFilter(filterList);
 
                 PromptSelectionOptions selOpts = new PromptSelectionOptions();
-                selOpts.MessageForAdding = "\nVyberite blok RL-POS dlya chteniya:";
+                selOpts.MessageForAdding = "\nSelect RL-POS block to read:";
                 selOpts.SingleOnly = true;
                 PromptSelectionResult res = ed.GetSelection(selOpts, filter);
 
