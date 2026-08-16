@@ -6,6 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **PoseEdit2026** is an AutoCAD 2026 .NET plugin (C#, .NET 8, WPF) for structural/rebar drafting. It registers commands in AutoCAD via `[CommandMethod]` attributes and provides a WPF dialog for editing rebar position blocks (`RL-POS`, `RL-POS2`).
 
+The Solution (`PoseEdit2026.sln`) now has a second project, **`BEAMDRAW`** (`BEAMDRAW\BEAMDRAW.csproj`),
+a separate AutoCAD plugin (own DLL, own `NETLOAD`) for drawing reinforcement details of monolithic
+beams and ригели (girders) — a different domain from RL-POS block editing, kept as its own project
+rather than another file in PoseEdit2026. As of 2026-08-16 it's just a `BEAMDRAW` command stub with
+no drawing logic yet — needs a spec (input data, standard to follow, how data is entered) before
+building it out. Same multi-target setup as PoseEdit2026 (`net48` for AutoCAD 2024,
+`net8.0-windows` for 2025/2026).
+
+**Important gotcha for any project added under this repo root**: `PoseEdit2026.csproj`'s SDK-style
+default file glob is recursive, so a new project's folder must be explicitly excluded in
+`PoseEdit2026.csproj` (`<Compile Remove="NewProject\**" />` etc., see the ItemGroup near the top of
+`PoseEdit2026.csproj`) — otherwise PoseEdit2026 will also try to compile the new project's `.cs`
+files (and even its generated `obj\*.cs`), causing duplicate-assembly-attribute build errors.
+
 ## Build
 
 ```
