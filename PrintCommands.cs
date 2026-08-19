@@ -47,9 +47,14 @@ namespace PoseEdit2026
         private const string PlotterName = "AutoCAD PDF (High Quality Print).pc3";
 
         // Допуск при сравнении размеров рамки со стандартными форматами, в мм.
-        // Рамки редко бывают ИДЕАЛЬНО 210.00x297.00 - обычно есть небольшая погрешность
-        // черчения (доли миллиметра - миллиметр), поэтому сравниваем "почти равно".
-        private const double SizeTolerance = 2.0;
+        // Рамки на реальных чертежах почти никогда не бывают ИДЕАЛЬНО 210.00x297.00 -
+        // погрешность черчения в несколько мм - обычное дело (проверено на реальном
+        // тесте 2026-08-19: рамка листа "A4" оказалась 210x294, то есть на 3мм короче
+        // "учебных" 297 - при старом допуске в 2мм лист ошибочно считался нераспознанным).
+        // 5мм тут безопасны: между соседними стандартными размерами (210->297->420->
+        // 594->841->1189) разница минимум 87мм, перепутать их даже с большим запасом
+        // не получится.
+        private const double SizeTolerance = 5.0;
 
         // Стандартные листы ISO серии A, короткая сторона x длинная сторона, в мм.
         // (Label, Short, Long) - "A4" самый маленький, "A0" самый большой.
@@ -120,7 +125,7 @@ namespace PoseEdit2026
                     double widthMm = frame.Value.MaxPoint.X - frame.Value.MinPoint.X;
                     double heightMm = frame.Value.MaxPoint.Y - frame.Value.MinPoint.Y;
 
-                    string mediaName = FindMatchingMedia(widthMm, heightMm, out bool rotate);
+                    string mediaName = FindMatchingMedia(layout, widthMm, heightMm, out bool rotate);
                     if (mediaName == null)
                     {
                         double shortSide = Math.Min(widthMm, heightMm);
@@ -329,7 +334,18 @@ namespace PoseEdit2026
         // Возвращает имя канонического размера бумаги, если нашли подходящий, иначе null.
         // "rotate" (out) - true, если для точного совпадения с найденным ISO-размером рамку
         // нужно повернуть (то есть совпадение нашлось по перевёрнутым width/height).
-        private static string FindMatchingMedia(double widthMm, double heightMm, out bool rotate)
+        //
+        // ВАЖНО (баг найден и исправлен 2026-08-19): раньше тут был "PlotSettings(false)" -
+        // ПУСТОЙ, ни к какому реальному листу не привязанный объект, и следующая строка
+        // "SetPlotConfigurationName(tempPs, PlotterName, null)" на нём падала с
+        // "Autodesk.AutoCAD.Runtime.Exception: eInvalidInput" (поймано пользователем на
+        // реальном тесте) - похоже, "null" в качестве имени бумаги означает "оставь как
+        // было", а у пустого PlotSettings просто нет предыдущего валидного значения, чтобы
+        // "оставить". Исправлено: сначала копируем НАСТОЯЩИЕ настройки существующего листа
+        // (layout.CopyFrom) - точно так же, как уже делает BuildPlotInfo ниже - тогда у
+        // tempPs есть валидное "текущее" имя бумаги, и null ("не менять его") больше не
+        // ломается.
+        private static string FindMatchingMedia(Layout layout, double widthMm, double heightMm, out bool rotate)
         {
             rotate = false;
             double shortSide = Math.Min(widthMm, heightMm);
@@ -337,11 +353,11 @@ namespace PoseEdit2026
 
             PlotSettingsValidator psv = PlotSettingsValidator.Current;
 
-            // GetPlotDeviceCapabilities нужен, чтобы получить актуальный список
-            // "канонических" имён бумаги, которые ДЕЙСТВИТЕЛЬНО существуют в этом PC3
-            // прямо сейчас (стандартные + всё, что пользователь когда-либо добавил вручную
-            // через мастер) - вместо того чтобы гадать точную строку названия "вслепую".
-            PlotSettings tempPs = new PlotSettings(false);
+            // Список "канонических" имён бумаги, которые ДЕЙСТВИТЕЛЬНО существуют в этом
+            // PC3 прямо сейчас (стандартные + всё, что пользователь когда-либо добавил
+            // вручную через мастер) - вместо того чтобы гадать точную строку названия "вслепую".
+            PlotSettings tempPs = new PlotSettings(layout.ModelType);
+            tempPs.CopyFrom(layout);
             psv.SetPlotConfigurationName(tempPs, PlotterName, null);
             System.Collections.Specialized.StringCollection mediaNames = psv.GetCanonicalMediaNameList(tempPs);
 
