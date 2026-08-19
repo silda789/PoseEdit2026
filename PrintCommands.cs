@@ -180,7 +180,16 @@ namespace PoseEdit2026
             // для каждого печатаемого листа по очереди - запоминаем, какой лист был активен
             // ДО запуска команды, чтобы вернуть пользователя туда же после печати (тот же
             // приём save/restore, что и в RoutineCommands.LAYSHIFT/LAYRENUM).
-            // ================================================================================
+            //
+            // BACKGROUNDPLOT - принудительно ставим в 0 (= "печатать только на переднем
+            // плане, последовательно") на время печати. Если у пользователя эта переменная
+            // была не 0 (AutoCAD по умолчанию часто ставит 2 = "фоновая печать разрешена
+            // для Plot и Publish"), AutoCAD может пытаться параллельно фоново обработать
+            // наш пакетный PlotEngine - это прямо названо "критичным требованием" в
+            // официальном примере Autodesk по программному плоттингу, и раньше было упущено
+            // при портировании - могло быть одной из причин "зависания"/медленной печати.
+            int originalBackgroundPlot = (short)Application.GetSystemVariable("BACKGROUNDPLOT");
+            Application.SetSystemVariable("BACKGROUNDPLOT", 0);
             string originalActiveLayout = LayoutManager.Current.CurrentLayout;
 
             using (doc.LockDocument())
@@ -253,6 +262,10 @@ namespace PoseEdit2026
                 // BuildPlotInfo переключал текущий лист много раз подряд во время печати.
                 try { LayoutManager.Current.CurrentLayout = originalActiveLayout; }
                 catch (System.Exception) { /* лист удалён/недоступен - остаёмся где есть */ }
+
+                // Возвращаем BACKGROUNDPLOT в то значение, что было до команды - не наше
+                // дело менять пользовательские настройки насовсем, только на время печати.
+                Application.SetSystemVariable("BACKGROUNDPLOT", originalBackgroundPlot);
             }
         }
 
