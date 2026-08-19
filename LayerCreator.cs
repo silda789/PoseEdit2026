@@ -99,7 +99,7 @@ namespace PoseEdit2026
 
                     // Создаем слои
                     LayerCreationResult result = CreateLayers(db, settings);
-                    
+
                     // Детальное сообщение о результатах
                     if (result.SuccessCount > 0)
                     {

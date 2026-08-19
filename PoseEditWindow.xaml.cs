@@ -53,12 +53,12 @@ namespace PoseEdit2026
                 // ====================================================================================
                 // СПИСОК 1: cmbShapeNumber (Номер формы арматуры)
                 // ====================================================================================
-                // Заполняем список номерами форм от 00 до 93
-                // "D2" означает формат с двумя цифрами (00, 01, 02, ..., 93)
-                // ВНИМАНИЕ: В папке Resources есть только 94 картинки (от Shape_00.png до Shape_93.png)
+                // Заполняем список номерами форм от 00 до 95
+                // "D2" означает формат с двумя цифрами (00, 01, 02, ..., 95)
+                // ВНИМАНИЕ: В папке Resources есть 96 картинок (от Shape_00.png до Shape_95.png)
                 // C# 12 / .NET 8: Используем Enumerable.Range для более читаемого кода
                 cmbShapeNumber.Items.Clear(); // Очищаем список перед заполнением
-                var shapeNumbers = Enumerable.Range(0, 94) // Генерируем числа от 0 до 93 (94 элемента)
+                var shapeNumbers = Enumerable.Range(0, 96) // Генерируем числа от 0 до 95 (96 элементов)
                     .Select(i => i.ToString("D2"))          // Преобразуем в строку с ведущим нулем (00, 01, ...)
                     .ToArray();                             // Преобразуем в массив
                 foreach (var number in shapeNumbers)
@@ -360,6 +360,18 @@ namespace PoseEdit2026
                     txtSpace.Text = attributes["ARALIK"];
                 }
 
+                // TIK: "0" = позиция уже на выпущенном/согласованном чертеже - POZVERN её
+                // не трогает; любое другое значение (включая пустое/отсутствующее - для
+                // новых, ещё не сохранённых блоков) считаем "1" = можно перенумеровать.
+                if (attributes.ContainsKey("TIK") && attributes["TIK"] == "0")
+                {
+                    rbTik0.IsChecked = true;
+                }
+                else
+                {
+                    rbTik1.IsChecked = true;
+                }
+
                 // Загрузка значения Note из атрибута (если есть)
                 if (attributes.ContainsKey("NOTE"))
                 {
@@ -430,7 +442,7 @@ namespace PoseEdit2026
             // Например: "2x20Ø10/100 L=2260 Хомут" -> Note = "Хомут"
             string noteValue = "";
             string tbTextWithoutNote = tbText;
-            
+
             // Ищем "L=" в строке
             int lIndex = tbText.IndexOf("L=");
             if (lIndex > 0)
@@ -443,9 +455,10 @@ namespace PoseEdit2026
                 {
                     // Извлекаем Note (всё после пробела)
                     noteValue = afterL.Substring(spaceAfterLength + 1).Trim();
-                    // Убираем Note из строки для дальнейшего парсинга
-                    tbTextWithoutNote = tbText.Substring(0, lIndex + 2 + spaceAfterLength);
                 }
+                // "L=..." (и всё, что после) не относится к диаметру/шагу - отрезаем в любом случае,
+                // даже если Note нет (иначе "10Ø22 L=2350" без Note парсится как диаметр "22 L=2350")
+                tbTextWithoutNote = tbText.Substring(0, lIndex).TrimEnd();
             }
             
             // Если Note найден, записываем его
@@ -525,13 +538,13 @@ namespace PoseEdit2026
             // ====================================================================================
             // ПРОВЕРКА: Существует ли картинка для данного номера формы
             // ====================================================================================
-            // В папке Resources есть только картинки от Shape_00.png до Shape_93.png (94 картинки)
-            // Если номер формы больше 93 или равен "99" (не распознано), картинки нет
+            // В папке Resources есть картинки от Shape_00.png до Shape_95.png (96 картинок)
+            // Если номер формы больше 95 или равен "99" (не распознано), картинки нет
             // Пытаемся преобразовать код в число для проверки
             if (int.TryParse(code, out int shapeNumber))
             {
-                // Если номер больше 93, картинки нет - очищаем изображение
-                if (shapeNumber > 93)
+                // Если номер больше 95, картинки нет - очищаем изображение
+                if (shapeNumber > 95)
                 {
                     imgPreview.Source = null;
                     return; // Выходим, не пытаясь загрузить несуществующую картинку
@@ -616,22 +629,7 @@ namespace PoseEdit2026
                 {
                     tbResult += "/" + txtSpace.Text.Trim();
                 }
-                
-                // Часть 4: L= txtLength (длина)
-                if (!string.IsNullOrWhiteSpace(txtLength.Text))
-                {
-                    string lengthValue = txtLength.Text.Trim();
-                    // Если txtLength не содержит "L=", добавляем его
-                    if (!lengthValue.StartsWith("L="))
-                    {
-                        tbResult += " L=" + lengthValue;
-                    }
-                    else
-                    {
-                        tbResult += " " + lengthValue;
-                    }
-                }
-                
+
                 // Часть 5: Note (примечание) в конце строки
                 if (!string.IsNullOrWhiteSpace(txtNote.Text))
                 {
@@ -642,12 +640,15 @@ namespace PoseEdit2026
                 // СОХРАНЕНИЕ АТРИБУТОВ В БЛОК
                 // ====================================================================================
                 Dictionary<string, string> newValues = new Dictionary<string, string>();
-                
+
                 // Основные атрибуты
                 newValues["POZ"] = txtPose.Text;
-                newValues["TB"] = tbResult; // Полная строка с шагом, длиной и Note
-                // BOY не сохраняем отдельно, так как длина уже включена в строку TB (чтобы не дублировалось)
+                newValues["TB"] = tbResult;
+                // BOY - отдельный атрибут (как везде в LegacyCommands.cs/PozHelper.cs), а не часть
+                // строки TB - иначе ParseTB при следующем открытии путает длину с диаметром
+                newValues["BOY"] = txtLength.Text.Trim();
                 newValues["TIP"] = txtType.Text;
+                newValues["TIK"] = rbTik0.IsChecked == true ? "0" : "1";
 
                 // Сохраняем ARALIK (SPACE) - шаг арматуры отдельным атрибутом
                 if (!string.IsNullOrWhiteSpace(txtSpace.Text))
@@ -671,6 +672,7 @@ namespace PoseEdit2026
                 newValues["R"] = GetValueOrTag(txtR);
 
                 BlockHelper.SetAttributes(_currentBlockId, newValues);
+                PozHelper.RepositionShapeText(_currentBlockId);
 
                 Document doc = App.DocumentManager.MdiActiveDocument;
                 doc.Editor.Command("_.UPDATEFIELD", _currentBlockId, "");
@@ -802,6 +804,11 @@ namespace PoseEdit2026
                     txtE.Text = result.E;
                     txtF.Text = result.F;
                     txtR.Text = result.R;
+
+                    // Запоминаем связь с этой полилинией: если её потом изменят (длину/угол),
+                    // REGEN/REGENALL и TDDBN пересчитают значения этой позиции автоматически.
+                    if (result.Type != "99")
+                        RebarRecognizer.SetLinkedPolyline(_currentBlockId, res.ObjectId);
                 }
             }
             catch (Exception ex)
@@ -832,18 +839,16 @@ namespace PoseEdit2026
                 if (!string.IsNullOrEmpty(txtItemMult.Text)) tbResult += txtItemMult.Text + "x";
                 tbResult += txtItem.Text + "Ø" + txtDiameter.Text;
                 if (!string.IsNullOrWhiteSpace(txtSpace.Text)) tbResult += "/" + txtSpace.Text.Trim();
-                if (!string.IsNullOrWhiteSpace(txtLength.Text))
-                {
-                    string lv = txtLength.Text.Trim();
-                    tbResult += lv.StartsWith("L=") ? " " + lv : " L=" + lv;
-                }
                 if (!string.IsNullOrWhiteSpace(txtNote.Text)) tbResult += " " + txtNote.Text.Trim();
 
                 var newValues = new Dictionary<string, string>
                 {
                     ["POZ"]  = targetPoz,
                     ["TB"]   = tbResult,
+                    // BOY - отдельный атрибут, не часть строки TB (см. btnUpdate_Click)
+                    ["BOY"]  = txtLength.Text.Trim(),
                     ["TIP"]  = txtType.Text,
+                    ["TIK"]  = rbTik0.IsChecked == true ? "0" : "1",
                     ["A"]    = GetValueOrTag(txtA),
                     ["B"]    = GetValueOrTag(txtB),
                     ["C"]    = GetValueOrTag(txtC),
@@ -859,6 +864,7 @@ namespace PoseEdit2026
                 Document doc = App.DocumentManager.MdiActiveDocument;
                 Database db  = doc.Database;
                 int updated  = 0;
+                var updatedIds = new List<ObjectId>();
 
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
@@ -878,10 +884,15 @@ namespace PoseEdit2026
                         if (!attrs.ContainsKey("POZ") || attrs["POZ"] != targetPoz) continue;
 
                         BlockHelper.SetAttributes(id, newValues);
+                        updatedIds.Add(id);
                         updated++;
                     }
                     tr.Commit();
                 }
+
+                // Расставляем TB/BOY/NOT по местам у каждого обновлённого блока (отдельно от
+                // основной транзакции выше - RepositionShapeText открывает свою собственную)
+                foreach (ObjectId id in updatedIds) PozHelper.RepositionShapeText(id);
 
                 MessageBox.Show($"Updated {updated} block(s) with POZ = {targetPoz}.", "UpdateAll", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -917,6 +928,11 @@ namespace PoseEdit2026
                     _isLoading = true;
                     LoadDataFromBlock();
                     _isLoading = false;
+
+                    // LoadDataFromBlock ставит cmbShapeNumber.Text, пока _isLoading=true, поэтому
+                    // SelectionChanged (который обновляет картинку) сам себя блокирует своей же
+                    // проверкой _isLoading - обновляем картинку вручную здесь
+                    UpdateShapeImage();
                 }
             }
             catch (Exception ex)

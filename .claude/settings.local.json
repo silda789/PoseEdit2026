@@ -14,7 +14,18 @@
       "Bash(dotnet nuget *)",
       "Bash(dotnet package *)",
       "Bash(git commit *)",
-      "Bash(git ls-tree *)"
+      "Bash(git ls-tree *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Get-Command *)",
+      "Bash(node *)",
+      "Bash(mkdir -p /c/Users/durum/AppData/Local/Temp/claude/C--Users-durum-Documents-GitHub-PoseEdit2026/c12b866d-109b-42f4-ba2e-7dc239aa3192/scratchpad)",
+      "Read(//c/Users/durum/AppData/Local/Temp/claude/**)",
+      "Bash(cp /tmp/skills.txt /c/Users/durum/AppData/Local/Temp/claude/C--Users-durum-Documents-GitHub-PoseEdit2026/c12b866d-109b-42f4-ba2e-7dc239aa3192/scratchpad/skills.txt)",
+      "Read(//c/Users/durum/Documents/**)",
+      "Read(//c/Users/durum/Documents/GitHub/**)",
+      "Bash(grep -n \"txtDiameter\\\\|GetCap\\\\|\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\\\\|attributes\\\\\\\\[\\\\\"TB\\\\\"\\\\\\\\]\" PoseEditWindow.xaml.cs)",
+      "Bash(python -c ' *)",
+      "Bash(grep -n \"i++; // Проп\\\\|j++; //\\\\|// Пропускаем\" QuantityTableGenerator.cs)"
     ]
   }
 }

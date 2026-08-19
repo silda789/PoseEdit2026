@@ -70,9 +70,11 @@ namespace PoseEdit2026
         }
 
         /// <summary>
-        /// Главная команда RQT - создание таблиц спецификации
+        /// Главная команда RQTN (было "RQT" в LISP - переименовано, чтобы не сталкиваться
+        /// с (defun c:RQT ...) из Temp/Command/QUANTITY.LSP, если старый LISP загружен
+        /// в той же сессии AutoCAD, что и этот плагин)
         /// </summary>
-        [CommandMethod("RQT")]
+        [CommandMethod("RQTN")]
         public static void CreateQuantityTables()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -255,21 +257,26 @@ namespace PoseEdit2026
         {
             List<RebarPositionInfo> result = new List<RebarPositionInfo>();
 
-            for (int i = 0; i < data.Count; i++)
+            int i = 0;
+            while (i < data.Count)
             {
-                if (i < data.Count - 1 &&
-                    data[i].Poz == data[i + 1].Poz &&
-                    data[i].Cap == data[i + 1].Cap &&
-                    data[i].Boy == data[i + 1].Boy)
+                int totalAdet = int.TryParse(data[i].Adet, out int a0) ? a0 : 0;
+
+                // Складываем количество со всеми подряд идущими дубликатами (та же
+                // Poz/Cap/Boy), а не только с одним соседним элементом
+                int j = i + 1;
+                while (j < data.Count &&
+                       data[j].Poz == data[i].Poz &&
+                       data[j].Cap == data[i].Cap &&
+                       data[j].Boy == data[i].Boy)
                 {
-                    // Объединяем количество
-                    int adet1 = int.TryParse(data[i].Adet, out int a1) ? a1 : 0;
-                    int adet2 = int.TryParse(data[i + 1].Adet, out int a2) ? a2 : 0;
-                    data[i].Adet = (adet1 + adet2).ToString();
-                    i++; // Пропускаем следующий элемент
+                    totalAdet += int.TryParse(data[j].Adet, out int aj) ? aj : 0;
+                    j++;
                 }
 
+                data[i].Adet = totalAdet.ToString();
                 result.Add(data[i]);
+                i = j;
             }
 
             return result;
@@ -299,17 +306,23 @@ namespace PoseEdit2026
             // Сортируем по диаметру
             tempList = tempList.OrderBy(x => int.TryParse(x.Cap, out int cap) ? cap : 9999).ToList();
 
-            // Группируем одинаковые диаметры и суммируем длины
+            // Группируем одинаковые диаметры и суммируем длины (складываем весь подряд идущий
+            // "забег" одинаковых диаметров, а не только один соседний элемент)
             List<DiameterInfo> result = new List<DiameterInfo>();
-            for (int i = 0; i < tempList.Count; i++)
+            int i = 0;
+            while (i < tempList.Count)
             {
-                if (i < tempList.Count - 1 && tempList[i].Cap == tempList[i + 1].Cap)
+                double totalLength = tempList[i].TotalLength;
+                int j = i + 1;
+                while (j < tempList.Count && tempList[j].Cap == tempList[i].Cap)
                 {
-                    // Объединяем одинаковые диаметры
-                    tempList[i].TotalLength += tempList[i + 1].TotalLength;
-                    i++; // Пропускаем следующий элемент
+                    totalLength += tempList[j].TotalLength;
+                    j++;
                 }
+
+                tempList[i].TotalLength = totalLength;
                 result.Add(tempList[i]);
+                i = j;
             }
 
             return result;
@@ -370,11 +383,19 @@ namespace PoseEdit2026
 
             if (fiIndex >= 0)
             {
-                int slashIndex = tb.IndexOf("/", fiIndex);
-                if (slashIndex > fiIndex)
+                int start = fiIndex + fiLength;
+                int slashIndex = tb.IndexOf("/", start);
+                int end = slashIndex >= 0 ? slashIndex : tb.Length;
+
+                // На случай старых TB, где после диаметра ещё шёл "L=..."/заметка через пробел
+                // (до фикса TB/BOY они хранились вместе) - обрезаем и по первому пробелу тоже
+                int spaceIndex = tb.IndexOf(' ', start);
+                if (spaceIndex >= 0 && spaceIndex < end) end = spaceIndex;
+
+                if (end > start)
                 {
-                    string capStr = tb.Substring(fiIndex + fiLength, slashIndex - fiIndex - fiLength);
-                    return capStr.Trim();
+                    string capStr = tb.Substring(start, end - start).Trim();
+                    if (capStr.Length > 0) return capStr;
                 }
             }
 
@@ -398,8 +419,24 @@ namespace PoseEdit2026
         {
             if (string.IsNullOrEmpty(boy)) return 0;
 
-            // Убираем "L=" и другие символы
-            boy = boy.Replace("L=", "").Replace("l=", "").Replace("(", "").Replace(")", "").Replace("~", "").Trim();
+            // Убираем "L=" и скобки (но НЕ "~" - см. ниже)
+            boy = boy.Replace("L=", "").Replace("l=", "").Replace("(", "").Replace(")", "").Trim();
+
+            // Диапазон "мин~макс" (так форматирует PozHelper.ComputeBendLength/TDDBN, когда
+            // размеры A-F заданы диапазоном) - берём среднее, как в LISP boy_oku_isle:
+            // (* 0.5 (+ min max)). ВАЖНО: раньше "~" просто вырезался без замены разделителем,
+            // и "1200~1300" превращалось в "12001300" (12 миллионов мм вместо ~1250).
+            if (boy.Contains('~'))
+            {
+                string[] parts = boy.Split('~');
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), out int minV) &&
+                    int.TryParse(parts[1].Trim(), out int maxV))
+                {
+                    return (int)Math.Round((minV + maxV) / 2.0);
+                }
+                return 0;
+            }
 
             if (int.TryParse(boy, out int result))
             {
@@ -851,20 +888,25 @@ namespace PoseEdit2026
             tr.AddNewlyCreatedDBObject(txt, true);
         }
 
-        // Пытается вставить блок PZ_XX.dwg из папки Standard (эскиз формы).
-        // Если файл не найден — тихо пропускает.
+        // Пытается вставить блок PZ_XX (эскиз формы) в таблицу.
+        // Если шаблона для этого типа нет — тихо пропускает.
         // Аналог LISP: (command ".-insert" dwgname ...)
+        //
+        // ВАЖНО (найдено и исправлено 2026-08-19): раньше этот метод искал PZ_XX.dwg НА
+        // ДИСКЕ через GetStandardPath() (Temp\Standard\ или папку рядом с DLL) - но
+        // реальные файлы (Resources\Standard\PZ_00.dwg..PZ_95.dwg) лежат совсем в другом
+        // месте и вообще не копируются рядом с собранной DLL. Из-за этого File.Exists()
+        // всегда возвращал false, метод молча выходил (return) без единой ошибки - RQTN
+        // отрабатывал полностью успешно, просто эскиз в таблице никогда не появлялся.
+        // Теперь используем те же встроенные (EmbeddedResource) ресурсы, что и PZREDEFN
+        // в LegacyCommands.cs - они гарантированно лежат внутри самой DLL, путь на диске
+        // тут вообще не при чём.
         private static void TryInsertPzBlock(BlockTableRecord space, Transaction tr, Database db,
             string tip, Point3d insertPt, double scaleX, double scaleY,
             Dictionary<string, string> dims)
         {
             try
             {
-                string standardPath = GetStandardPath();
-                string dwgFile = Path.Combine(standardPath, $"PZ_{tip}.dwg");
-                if (!File.Exists(dwgFile)) dwgFile = Path.Combine(standardPath, "PZ_99.dwg");
-                if (!File.Exists(dwgFile)) return;
-
                 string blockName = $"PZ_{tip}";
                 BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForWrite) as BlockTable;
                 ObjectId btrId;
@@ -875,9 +917,15 @@ namespace PoseEdit2026
                 }
                 else
                 {
+                    // Сначала пробуем шаблон конкретного типа, если его нет (например,
+                    // PZ_96..PZ_99 - для них .dwg-файлов пока нет) - откатываемся на PZ_99
+                    // как "нераспознанный" placeholder, как и в исходном LISP.
+                    string tempFile = ExtractPzTemplate(tip) ?? ExtractPzTemplate("99");
+                    if (tempFile == null) return;
+
                     using (Database srcDb = new Database(false, true))
                     {
-                        srcDb.ReadDwgFile(dwgFile, FileOpenMode.OpenForReadAndAllShare, true, "");
+                        srcDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, "");
                         btrId = db.Insert(blockName, srcDb, true);
                     }
                 }
@@ -906,6 +954,26 @@ namespace PoseEdit2026
                 }
             }
             catch { }
+        }
+
+        // Извлекает встроенный ресурс "PoseEdit2026.Resources.Standard.PZ_<tip>.dwg" во
+        // временный файл и возвращает путь к нему, либо null, если такого ресурса нет
+        // (LegacyCommands.ExtractEmbeddedResource бросает исключение на отсутствующий
+        // ресурс - тут превращаем это в null, а не даём упасть всей команде RQTN).
+        private static string ExtractPzTemplate(string tip)
+        {
+            string blockName = "PZ_" + tip;
+            string resourceName = $"PoseEdit2026.Resources.Standard.{blockName}.dwg";
+            string tempFile = Path.Combine(Path.GetTempPath(), blockName + "_sketch.dwg");
+            try
+            {
+                LegacyCommands.ExtractEmbeddedResource(resourceName, tempFile);
+                return tempFile;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // Общая логика рисования трёх таблиц.

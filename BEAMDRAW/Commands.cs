@@ -1,0 +1,76 @@
+// ====================================================================================
+// ФАЙЛ: Commands.cs
+// НАЗНАЧЕНИЕ: Точка входа плагина BEAMDRAW - отдельный AutoCAD-плагин (своя DLL, свой
+//             NETLOAD) внутри Solution PoseEdit2026, для черчения арматурных деталей
+//             монолитных балок и ригелей.
+//
+// ТЕКУЩЕЕ СОСТОЯНИЕ (см. CLAUDE.md / память сессии): открывает окно ввода данных
+// (BeamDrawWindow), затем чертит только "скелет" балки (BeamDrawer.DrawSkeleton) -
+// ленту балки, опоры, оси, размеры пролётов и подписи сечений. АРМАТУРЫ (хомутов,
+// крюков, анкеровки) на чертеже ещё нет - методика для неё будет описана пользователем
+// позже, отдельно для каждого шага.
+// ====================================================================================
+#nullable disable
+using System.Linq; // Sum() - для подсчёта суммарной длины балки в отчёте.
+using Autodesk.AutoCAD.Runtime;
+using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.DatabaseServices; // Database - нужна, чтобы передать её в BeamDrawer.
+using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry; // Point3d - точка вставки, которую спрашиваем у пользователя.
+
+namespace BEAMDRAW
+{
+    public class Commands
+    {
+        [CommandMethod("BEAMDRAW")]
+        public void DrawBeamCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            // Создаём "пустую" балку с одним пролётом по умолчанию (см. Beam.CreateDefaultSpan
+            // в BeamData.cs) и открываем окно ввода данных.
+            Beam beam = new Beam();
+
+            BeamDrawWindow win = new BeamDrawWindow(beam);
+
+            // Application.ShowModalWindow - тот же приём, что и в PoseEdit2026 (см.
+            // Commands.cs основного проекта, команда EEN): открывает WPF-окно поверх
+            // AutoCAD и ждёт, пока пользователь его закроет. Возвращает true, если
+            // закрыто через кнопку OK (DialogResult = true), false - если "Отмена".
+            bool? result = Application.ShowModalWindow(win);
+
+            if (result != true)
+            {
+                ed.WriteMessage("\nBEAMDRAW: cancelled by user.");
+                return;
+            }
+
+            double totalLength = beam.Spans.Sum(s => s.Length);
+            ed.WriteMessage($"\nBEAMDRAW '{beam.Name}': spans {beam.Spans.Count}, total length {totalLength:F0} mm.");
+
+            // Спрашиваем у пользователя, ГДЕ на чертеже начать (левый нижний угол ленты
+            // балки, ось №1) - стандартный приём AutoCAD-команд "укажи точку".
+            PromptPointOptions ppo = new PromptPointOptions(
+                "\nSpecify insertion point (bottom-left, axis 1): ");
+            PromptPointResult ppr = ed.GetPoint(ppo);
+            if (ppr.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nBEAMDRAW: insertion cancelled.");
+                return;
+            }
+
+            // doc.LockDocument() - обязательная "блокировка" документа перед тем, как
+            // менять базу чертежа из кода команды (а не через обычный пользовательский
+            // ввод) - тот же приём, что в LegacyCommands.cs основного проекта.
+            using (doc.LockDocument())
+            {
+                BeamDrawer.DrawSkeleton(db, beam, ppr.Value);
+            }
+
+            ed.WriteMessage("\nBEAMDRAW: beam skeleton drawn (no reinforcement yet - methodology not described yet).");
+        }
+    }
+}

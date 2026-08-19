@@ -524,7 +524,10 @@ namespace PoseEdit2026
                 string tb2 = attrs.TryGetValue("TB", out string tbv2) ? tbv2 : "";
                 string aralik2 = PozHelper.GetAralik(tb2);
                 string boluIsareti = aralik2.Length > 0 ? "/" : "";
-                int fiIndex = tb2.IndexOf(PozHelper.Fi, StringComparison.OrdinalIgnoreCase);
+                // FindDiameterSymbol - не голый tb2.IndexOf(PozHelper.Fi, ...) (искал бы
+                // только "Ø" и пропустил бы старые TB с "%%C") - см. подробный комментарий
+                // в PozHelper.cs про баг с диаметром, найденный 2026-08-19.
+                int fiIndex = PozHelper.FindDiameterSymbol(tb2).Index;
                 string prefix = fiIndex >= 0 ? tb2.Substring(0, fiIndex) : tb2;
                 string newTb = prefix + PozHelper.Fi + bilgiCap + boluIsareti + aralik2;
 
@@ -632,7 +635,7 @@ namespace PoseEdit2026
         // ====================================================================================
         // КОМАНДА: TDDHN (было "tddh" в LISP)
         // ====================================================================================
-        // НАЗНАЧЕНИЕ: Выводит содержимое error.txt (файл ошибок, который создаёт RQT при
+        // НАЗНАЧЕНИЕ: Выводит содержимое error.txt (файл ошибок, который создаёт RQTN при
         // проверке метража) в чертёж построчно как текстовые примитивы, начиная с указанной
         // точки и опускаясь вниз.
         // ПЕРЕВЕДЕНО ИЗ: (defun c:tddh (/ pn1) ...) — QUANTITY2.LSP, строки ~1754-1769
@@ -647,7 +650,7 @@ namespace PoseEdit2026
             string errorFile = System.IO.Path.Combine(QuantityTableGenerator.GetClientPath(), "error.txt");
             if (!System.IO.File.Exists(errorFile))
             {
-                ed.WriteMessage("\nerror.txt bulunamadi. Once RQT calistirin.");
+                ed.WriteMessage("\nerror.txt bulunamadi. Once RQTN calistirin.");
                 return;
             }
 
@@ -964,6 +967,19 @@ namespace PoseEdit2026
             PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
 
             List<ObjectId> eset;
+
+            // sonPoz - "смещение", с которого начинается нумерация НОВЫХ позиций (0 в
+            // обычном режиме - т.е. каждый запуск нумерует свою выборку заново с 1).
+            //
+            // ВАЖНО (2026-08-19): здесь ДО этого стоял вызов GetMaxPoz(ed), сканирующий
+            // весь чертёж - идея была "не сталкиваться с номерами, уже занятыми в других
+            // выборках". Пользователь объяснил и показал скриншотами реальную схему
+            // работы: POZ нумеруется НЕЗАВИСИМО НА КАЖДЫЙ ЭЛЕМЕНТ (колонна/балка) - в
+            // одном файле десятки колонн, у каждой своя таблица и свои позиции 1,2,3...,
+            // и это НЕ ошибка, а осознанный рабочий процесс. Глобальный GetMaxPoz был
+            // не багфиксом, а порчей нужного поведения - убран. POZVERN снова, как и
+            // оригинальный LISP c:pozver, нумерует ровно то, что выбрано сейчас, всегда
+            // начиная с 1 (+ sonPoz из режима "сохранить TIK=0" ниже, если он активен).
             int sonPoz = 0;
 
             if (selRes.Status != PromptStatus.OK)
@@ -981,6 +997,10 @@ namespace PoseEdit2026
                     if (tik == "0") esetOnce.Add(id); else eset.Add(id);
                 }
 
+                // В режиме "сохранить TIK=0" (пользователь нажал Enter на первом запросе)
+                // sonPoz - максимальный POZ СРЕДИ УЖЕ ВЫБРАННЫХ здесь TIK=0 позиций (не по
+                // всему чертежу) - новые позиции в этой же выборке продолжат нумерацию
+                // после них, а не начнут с 1 поверх уже занятых номеров этого же элемента.
                 foreach (ObjectId id in esetOnce)
                 {
                     var a = BlockHelper.GetAttributes(id);
@@ -1041,6 +1061,35 @@ namespace PoseEdit2026
 
             ed.Regen();
             ed.WriteMessage("\nPoz verme islemi tamamlandi... ");
+        }
+
+        // ====================================================================================
+        // КОМАНДА: POZSILN (было "pozsil" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Обнуляет номера POZ у выбранных блоков RL-POS (откат номеров,
+        // присвоенных POZVERN). Исходник LISP-функции не найден нигде в Temp/ — команда
+        // написана по описанию задачи, а не портирована построчно из файла.
+        [CommandMethod("POZSILN")]
+        public static void ClearPozCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nPoz numaralari sifirlanacak pozlari seciniz: "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
+            if (selRes.Status != PromptStatus.OK) return;
+
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                BlockHelper.SetAttributes(id, new Dictionary<string, string> { ["POZ"] = "0" });
+            }
+
+            ed.Regen();
+            ed.WriteMessage($"\n{selRes.Value.Count} pozun POZ numarasi sifirlandi.");
         }
 
         // Ключ идентичности геометрии позиции (аналог poz_icin_oku): совпадение этих полей
@@ -1338,8 +1387,10 @@ namespace PoseEdit2026
             }
         }
 
-        // Извлекает встроенный DWG-ресурс во временный файл (аналог логики в Commands.cs)
-        private static void ExtractEmbeddedResource(string resourceName, string destPath)
+        // Извлекает встроенный DWG-ресурс во временный файл (аналог логики в Commands.cs).
+        // internal (не private) - переиспользуется из QuantityTableGenerator.cs
+        // (TryInsertPzBlock, эскизы форм в таблице RQTN) - тот же приём, что и здесь.
+        internal static void ExtractEmbeddedResource(string resourceName, string destPath)
         {
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
             using (var stream = asm.GetManifestResourceStream(resourceName))
@@ -1397,6 +1448,194 @@ namespace PoseEdit2026
                 tr.Commit();
             }
             return false;
+        }
+
+        // ====================================================================================
+        // КОМАНДА: TDDBN (было "tddb" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Считает суммарную длину арматуры (с учётом изгибов) по размерам A-F и
+        // радиусу R, записывает результат в атрибут BOY. Позиции с TIP="99" не трогаются
+        // (BOY не перезаписывается), как и в оригинале.
+        // Коэффициенты по типу гиба — см. PozHelper.ComputeBendLength / Resources/PZ_TUM.txt.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:tddb (/) ...) — QUANTITY2.LSP, строки ~876-894
+        [CommandMethod("TDDBN")]
+        public static void CalculateBendLengthCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptSelectionOptions selOpts = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nOtomatik boy hesabi yapilacak pozlari seciniz (Not: 99 tipi pozlar duzeltilmez): "
+            };
+            PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
+            if (selRes.Status != PromptStatus.OK) return;
+
+            foreach (ObjectId id in selRes.Value.GetObjectIds())
+            {
+                // Если позиция связана с полилинией (кнопка "Determination" в EEN) - подтягиваем
+                // актуальные TIP/A-F/R с чертежа на случай, если полилинию с тех пор изменили.
+                RebarRecognizer.SyncFromLinkedPolyline(id);
+
+                var attrs = BlockHelper.GetAttributes(id);
+                string tip = attrs.TryGetValue("TIP", out string tipVal) ? tipVal : "";
+                string boyStr = PozHelper.ComputeBendLength(
+                    tip,
+                    attrs.TryGetValue("A", out string a) ? a : "",
+                    attrs.TryGetValue("B", out string b) ? b : "",
+                    attrs.TryGetValue("C", out string c) ? c : "",
+                    attrs.TryGetValue("D", out string d) ? d : "",
+                    attrs.TryGetValue("E", out string e) ? e : "",
+                    attrs.TryGetValue("F", out string f) ? f : "",
+                    attrs.TryGetValue("R", out string r) ? r : "");
+
+                if (tip != "99")
+                {
+                    BlockHelper.SetAttributes(id, new Dictionary<string, string> { ["BOY"] = boyStr });
+                }
+                PozHelper.RepositionShapeText(id);
+            }
+
+            ed.WriteMessage($"\n{selRes.Value.Count} poz guncellendi.");
+        }
+
+        // ====================================================================================
+        // КОМАНДА: POZCLAYERN (было "pozclayer" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: Переносит все блоки RL-POS на слой "ren.mtr.tb", создавая слой,
+        // если он ещё не существует.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:pozclayer (/) ...) — QUANTITY2.LSP, строки ~66-69
+        [CommandMethod("POZCLAYERN")]
+        public static void MoveToRenMtrTbLayerCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            PromptSelectionResult selRes = ed.SelectAll(RlPosFilter());
+            if (selRes.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nRL-POS blogu bulunamadi.");
+                return;
+            }
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                EnsureLayer(tr, db, "ren.mtr.tb");
+                foreach (ObjectId id in selRes.Value.GetObjectIds())
+                {
+                    BlockReference blkRef = tr.GetObject(id, OpenMode.ForWrite) as BlockReference;
+                    if (blkRef == null) continue;
+                    blkRef.Layer = "ren.mtr.tb";
+                }
+                tr.Commit();
+            }
+
+            ed.WriteMessage($"\n{selRes.Value.Count} poz \"ren.mtr.tb\" katmanina tasindi.");
+        }
+
+        // ====================================================================================
+        // КОМАНДА: PZREDEFN (было "PZREDEF" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: переопределяет определения блоков PZ_00...PZ_95 (эталонные формы
+        // арматуры, используемые семейством инструментов QUANTITY) из встроенных DWG-
+        // шаблонов (Resources/Standard/PZ_XX.dwg) и досинхронизирует атрибуты у всех
+        // найденных в чертеже экземпляров этих блоков - тот же приём, что и PZGN выше
+        // (SyncAttributesToDefinition), просто по 96 именам блоков вместо одного RL-POS.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:PZREDEF (/) ...) - POSREDEF.LSP, строки 44-53, которая
+        // вызывает (defun ReDef ...) (автор - Lee Mac, строки 2-42 того же файла).
+        //
+        // ОТЛИЧИЕ ОТ ОРИГИНАЛА: оригинальный PZREDEF первым делом вызывал
+        // metraj_layer_olustur - настройку слоёв и текстового стиля из ОТДЕЛЬНОГО набора
+        // файлов (Standard/REN_QT_layer_file.txt + шрифт "GOST Common.ttf"), которых нет
+        // ни в этом репозитории, ни в Temp/, и которые концептуально не имеют отношения
+        // к самому переопределению блоков. Этот шаг сознательно НЕ портирован - если
+        // нужны стандартные слои, для этого уже есть отдельная команда CREATELAYERS/CL.
+        // PZREDEFN делает только то, что заявлено в названии - переопределяет блоки.
+        //
+        // ВНИМАНИЕ: это операция массового изменения по ВСЕМ 96 блокам PZ_00...PZ_95 -
+        // сохраните чертёж перед запуском (как и у PZGN).
+        [CommandMethod("PZREDEFN")]
+        public static void RedefineStandardShapeBlocksCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            string confirm = ReadLine(ed,
+                "\nBu islem PZ_00...PZ_95 bloklarinin TUMUNU guncel sablonlarla yeniden tanimlayacak. " +
+                "Once cizimi kaydedin. Devam edilsin mi? (Evet/Hayir): ");
+            if (!string.Equals(confirm, "Evet", StringComparison.OrdinalIgnoreCase)) return;
+
+            int redefined = 0;
+            int missing = 0;
+            int syncedInstances = 0;
+
+            // "i.ToString("D2")" - тот же приём, что и в PoseEditWindow.xaml.cs для списка
+            // форм: превращает 0,1,2... в "00","01","02"... - имена блоков и файлов
+            // именно двузначные (PZ_00, PZ_01, ..., PZ_95).
+            for (int i = 0; i <= 95; i++)
+            {
+                string code = i.ToString("D2");
+                string blockName = "PZ_" + code;
+
+                // Имя встроенного ресурса = "ИмяПроекта.Папка.Подпапка.Файл.dwg" - тот же
+                // принцип именования, что и у ResourceName1/ResourceName2 в Commands.cs,
+                // просто с дополнительной подпапкой "Standard".
+                string resourceName = $"PoseEdit2026.Resources.Standard.PZ_{code}.dwg";
+                string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), blockName + "_redef.dwg");
+
+                try
+                {
+                    ExtractEmbeddedResource(resourceName, tempFile);
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\n{blockName}: sablon bulunamadi ({ex.Message}), atlandi.");
+                    missing++;
+                    continue;
+                }
+
+                // db.Insert(blockName, sourceDb, false) - тот же приём, что и в PZGN выше:
+                // напрямую обновляет (или создаёт, если блока ещё не было) ОПРЕДЕЛЕНИЕ
+                // блока в таблице блоков чертежа из содержимого внешнего DWG-файла. Не
+                // нужно, в отличие от оригинального LISP-приёма Lee Mac, вставлять блок
+                // в пространство модели и тут же удалять - .NET API даёт это напрямую.
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    Database sourceDb = new Database(false, true);
+                    sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, null);
+                    db.Insert(blockName, sourceDb, false);
+                    sourceDb.Dispose();
+                    tr.Commit();
+                }
+                redefined++;
+
+                // Синхронизируем атрибуты у всех экземпляров ИМЕННО ЭТОГО блока, если
+                // такие есть в чертеже (в обычном рабочем процессе PZ_XX почти никогда не
+                // вставляются напрямую - EEN/RQTN их не используют, см. CLAUDE.md - но
+                // ATTSYNC-аналог на блоке без единого экземпляра просто ничего не находит
+                // и не делает, это безопасно и недорого проверить на каждой итерации).
+                TypedValue[] filterList =
+                [
+                    new TypedValue((int)DxfCode.Start, "INSERT"),
+                    new TypedValue((int)DxfCode.BlockName, blockName)
+                ];
+                PromptSelectionResult selRes = ed.SelectAll(new SelectionFilter(filterList));
+                if (selRes.Status == PromptStatus.OK)
+                {
+                    foreach (ObjectId id in selRes.Value.GetObjectIds())
+                    {
+                        SyncAttributesToDefinition(db, id);
+                        syncedInstances++;
+                    }
+                }
+            }
+
+            ed.WriteMessage($"\nPZREDEFN: {redefined} blok yeniden tanimlandi, {missing} sablon bulunamadi, {syncedInstances} ornek senkronize edildi.");
         }
     }
 }

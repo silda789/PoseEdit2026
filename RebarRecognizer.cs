@@ -1386,5 +1386,145 @@ namespace PoseEdit2026
             // Проверяем, что разница между углом и 90° меньше 5°
             return Math.Abs(angleDeg - 90.0) < 5.0;
         }
+
+        // ====================================================================================
+        // СВЯЗЬ ПОЗИЦИИ С ПОЛИЛИНИЕЙ ("Determination" помнит, откуда взялись значения)
+        // ====================================================================================
+        // Кнопка "Determination" распознаёт форму по полилинии один раз. Чтобы значения
+        // A-F/TIP/BOY автоматически обновлялись позже (если пользователь изменит длину/угол
+        // той же полилинии), ссылка на неё (handle) сохраняется в блоке RL-POS через XDATA -
+        // переживает сохранение и переоткрытие чертежа. Дальше:
+        //   - REGEN/REGENALL пересинхронизируют ВСЕ связанные позиции в чертеже (см. ExtensionApp.cs)
+        //   - TDDBN пересинхронизирует только те позиции, которые выбраны для расчёта длины
+        // При следующем открытии EEN окно просто читает уже обновлённые атрибуты блока - никакой
+        // отдельной логики в PoseEditWindow для этого не нужно.
+        private const string LinkAppName = "POSEDIT_LINK";
+
+        private static void EnsureRegApp(Database db, Transaction tr)
+        {
+            RegAppTable regTable = tr.GetObject(db.RegAppTableId, OpenMode.ForRead) as RegAppTable;
+            if (regTable.Has(LinkAppName)) return;
+
+            regTable.UpgradeOpen();
+            RegAppTableRecord app = new RegAppTableRecord { Name = LinkAppName };
+            regTable.Add(app);
+            tr.AddNewlyCreatedDBObject(app, true);
+        }
+
+        // Запоминает, что позиция blockId распознана по геометрии polylineId
+        public static void SetLinkedPolyline(ObjectId blockId, ObjectId polylineId)
+        {
+            if (blockId.IsNull || polylineId.IsNull) return;
+            Database db = blockId.Database;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                EnsureRegApp(db, tr);
+
+                BlockReference blkRef = tr.GetObject(blockId, OpenMode.ForWrite) as BlockReference;
+                Entity line = tr.GetObject(polylineId, OpenMode.ForRead) as Entity;
+                if (blkRef == null || line == null) { tr.Commit(); return; }
+
+                using (ResultBuffer rb = new ResultBuffer(
+                    new TypedValue((int)DxfCode.ExtendedDataRegAppName, LinkAppName),
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, line.Handle.ToString())))
+                {
+                    blkRef.XData = rb;
+                }
+
+                tr.Commit();
+            }
+        }
+
+        // Читает сохранённый handle связанной полилинии и превращает его в ObjectId
+        // (ObjectId.Null, если связи нет или объект больше не существует)
+        private static ObjectId GetLinkedPolylineId(Transaction tr, ObjectId blockId)
+        {
+            BlockReference blkRef = tr.GetObject(blockId, OpenMode.ForRead) as BlockReference;
+            if (blkRef == null) return ObjectId.Null;
+
+            ResultBuffer rb = blkRef.GetXDataForApplication(LinkAppName);
+            if (rb == null) return ObjectId.Null;
+
+            foreach (TypedValue tv in rb.AsArray())
+            {
+                if (tv.TypeCode != (int)DxfCode.ExtendedDataAsciiString) continue;
+
+                string handleStr = tv.Value as string;
+                if (string.IsNullOrEmpty(handleStr)) continue;
+                if (!long.TryParse(handleStr, System.Globalization.NumberStyles.HexNumber, null, out long handleVal)) continue;
+
+                try
+                {
+                    ObjectId id = blockId.Database.GetObjectId(false, new Handle(handleVal), 0);
+                    if (!id.IsErased) return id;
+                }
+                catch { /* handle не найден в базе - связь протухла, игнорируем */ }
+            }
+            return ObjectId.Null;
+        }
+
+        // Пересчитывает TIP/A-F/R/BOY для одной позиции по связанной полилинии (аналог
+        // повторного нажатия "Determination", но без диалога и без выбора мышью).
+        // Возвращает true, если реально что-то пересчитала (связь есть, объект найден, форма распознана).
+        public static bool SyncFromLinkedPolyline(ObjectId blockId)
+        {
+            if (blockId.IsNull || !blockId.IsValid || blockId.IsErased) return false;
+
+            ObjectId lineId;
+            using (Transaction tr = blockId.Database.TransactionManager.StartTransaction())
+            {
+                lineId = GetLinkedPolylineId(tr, blockId);
+                tr.Commit();
+            }
+            if (lineId.IsNull || !lineId.IsValid || lineId.IsErased) return false;
+
+            RebarResult result = Recognize(lineId);
+            if (result.Type == "99") return false;
+
+            BlockHelper.SetAttributes(blockId, new Dictionary<string, string>
+            {
+                ["TIP"] = result.Type,
+                ["A"] = result.A,
+                ["B"] = result.B,
+                ["C"] = result.C,
+                ["D"] = result.D,
+                ["E"] = result.E,
+                ["F"] = result.F,
+                ["R"] = result.R,
+                ["BOY"] = result.Length,
+            });
+
+            // Без этого BOY остаётся невидимым/на старом месте и может наложиться на TB -
+            // именно эта функция решает, показывать ли BOY и где его разместить рядом с TB.
+            PozHelper.RepositionShapeText(blockId);
+            return true;
+        }
+
+        // Проходит по всем блокам RL-POS в текущем пространстве чертежа и пересинхронизирует
+        // те из них, у кого есть связанная полилиния. Используется по REGEN/REGENALL (см. ExtensionApp.cs).
+        public static int SyncAllLinkedBlocksInDatabase(Database db)
+        {
+            int synced = 0;
+            var ids = new List<ObjectId>();
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                BlockTableRecord ms = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+                foreach (ObjectId id in ms)
+                {
+                    BlockReference blkRef = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                    if (blkRef != null && blkRef.Name == "RL-POS") ids.Add(id);
+                }
+                tr.Commit();
+            }
+
+            foreach (ObjectId id in ids)
+            {
+                if (SyncFromLinkedPolyline(id)) synced++;
+            }
+            return synced;
+        }
     }
 }

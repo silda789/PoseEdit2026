@@ -12,6 +12,11 @@
 
 #nullable disable
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 
@@ -19,19 +24,48 @@ namespace PoseEdit2026
 {
     public static class PozHelper
     {
-        // "%%C" - управляющий код AutoCAD для символа диаметра (Ø). В LISP это (fi_) -> fi
-        public const string Fi = "%%C";
+        // "Ø" - символ диаметра (Unicode), именно его пишет в TB текущий WPF-редактор EEN
+        // (см. PoseEditWindow.xaml.cs: "Ø" + txtDiameter.Text) - используем его же при
+        // СОЗДАНИИ новых/переписанных строк TB в этом файле и в LegacyCommands.cs
+        // (через PozHelper.Fi). "%%C" - старый управляющий код AutoCAD для того же символа
+        // (LISP-эпоха, до перехода на WPF) - остаётся как fallback при ЧТЕНИИ старых TB,
+        // которые ещё не были открыты/пересохранены через новый редактор.
+        public const string Fi = "Ø";
 
         // ====================================================================================
         // РАЗБОР СТРОКИ TB (сырые подстроки, БЕЗ вычисления выражений - аналог poz_edit_* из POSEDIT.LSP)
         // ====================================================================================
 
-        // poz_edit_adet_carpi: множитель БЕЗ символа "x" (например "3" в "3x20%%C10" - вызывающий
+        // Ищет символ диаметра в TB - сначала "Ø" (текущий формат), потом "%%C"/"%%c"
+        // (старый формат) - тот же порядок проверки, что уже был в PoseEditWindow.xaml.cs
+        // (ParseTB) и QuantityTableGenerator.cs (ParseAdetFromTB/ParseCapFromTB).
+        //
+        // ВАЖНО (баг найден и исправлен 2026-08-19): раньше GetAdetCarpi/GetAdet/GetCap
+        // искали ТОЛЬКО "%%C" (через старую константу Fi="%%C") - для ЛЮБОЙ позиции,
+        // отредактированной через EEN (то есть практически для всех позиций в реальной
+        // работе - TB там всегда с "Ø", не "%%C"), эти функции молча возвращали "" вместо
+        // диаметра. Из-за этого POZVERN считал позиции с РАЗНЫМ диаметром одинаковыми
+        // (Cap="" у всех, раз diameter не находился) и присваивал им один и тот же POZ -
+        // пользователь поймал это на реальном чертеже (Ø32 и Ø36 получили один POZ).
+        public static (int Index, int Length) FindDiameterSymbol(string tb)
+        {
+            if (string.IsNullOrEmpty(tb)) return (-1, 0);
+
+            int idx = tb.IndexOf("Ø", StringComparison.Ordinal);
+            if (idx >= 0) return (idx, 1);
+
+            idx = tb.IndexOf("%%C", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0) return (idx, 3);
+
+            return (-1, 0);
+        }
+
+        // poz_edit_adet_carpi: множитель БЕЗ символа "x" (например "3" в "3x20Ø10" - вызывающий
         // код сам дописывает "x" при сборке строки, как и в оригинале)
         public static string GetAdetCarpi(string tb)
         {
             if (string.IsNullOrEmpty(tb)) return "";
-            int fiIndex = tb.IndexOf(Fi, StringComparison.OrdinalIgnoreCase);
+            int fiIndex = FindDiameterSymbol(tb).Index;
             if (fiIndex < 0) return "";
             string adetKismi = tb.Substring(0, fiIndex);
             int lastX = adetKismi.ToUpperInvariant().LastIndexOf('X');
@@ -40,11 +74,11 @@ namespace PoseEdit2026
             return "";
         }
 
-        // poz_edit_adet: количество стержней (без множителя), например "20" в "3x20%%C10"
+        // poz_edit_adet: количество стержней (без множителя), например "20" в "3x20Ø10"
         public static string GetAdet(string tb)
         {
             if (string.IsNullOrEmpty(tb)) return "";
-            int fiIndex = tb.IndexOf(Fi, StringComparison.OrdinalIgnoreCase);
+            int fiIndex = FindDiameterSymbol(tb).Index;
             if (fiIndex < 0) return "";
             string adetKismi = tb.Substring(0, fiIndex);
             if (adetKismi.Length == 0) return "";
@@ -53,13 +87,14 @@ namespace PoseEdit2026
             return adetKismi.Substring(lastX + 1);
         }
 
-        // poz_edit_cap: диаметр между "%%C" и "/" (или до конца строки), например "10" в "20%%C10/100"
+        // poz_edit_cap: диаметр между символом диаметра и "/" (или до конца строки),
+        // например "10" в "20Ø10/100"
         public static string GetCap(string tb)
         {
             if (string.IsNullOrEmpty(tb)) return "";
-            int fiIndex = tb.IndexOf(Fi, StringComparison.OrdinalIgnoreCase);
+            var (fiIndex, fiLength) = FindDiameterSymbol(tb);
             if (fiIndex < 0) return "";
-            int start = fiIndex + Fi.Length;
+            int start = fiIndex + fiLength;
             int slashIndex = tb.IndexOf('/', start);
             if (slashIndex < 0) slashIndex = tb.Length;
             if (slashIndex < start) return "";
@@ -254,6 +289,110 @@ namespace PoseEdit2026
         private static bool AnglesEqual(double a, double b, double tolerance)
         {
             return Math.Abs(a - b) < tolerance;
+        }
+
+        // ====================================================================================
+        // ФУНКЦИЯ: ComputeBendLength (аналог b_h из QUANTITY2.LSP, строки ~1282-1327,
+        // с коэффициентами из PZ_TUM_coz, строки ~1221-1260) — используется TDDBN
+        // ====================================================================================
+        // Коэффициенты по типу гиба (tip) взяты из встроенного ресурса Resources/PZ_TUM.txt
+        // (найден и скопирован из старой рабочей копии проекта, отдельно от этого репозитория —
+        // такого файла раньше не было ни в Temp/, ни в истории git). Формат строки в файле:
+        // ";<tip>;CARP_A;CARP_B;CARP_C;CARP_D;CARP_E;CARP_F;CARP_BR;CARP_r;CARP_cap;"
+        //
+        // ВАЖНО: как и в оригинальном LISP, из полной формулы BS8666:2005 здесь намеренно
+        // исключены последние два слагаемых (CARP_r*r и CARP_cap*cap) — см. комментарий в
+        // b_h в QUANTITY2.LSP: это оставляет расчётную длину арматуры чуть больше настоящей,
+        // как запас. Значения CARP_r/CARP_cap всё равно читаются из файла (для точного
+        // соответствия исходнику), просто не участвуют в сумме.
+        private static Dictionary<string, double[]> _bendCoefficients;
+
+        private static Dictionary<string, double[]> BendCoefficients
+        {
+            get
+            {
+                if (_bendCoefficients == null) _bendCoefficients = LoadBendCoefficients();
+                return _bendCoefficients;
+            }
+        }
+
+        private static Dictionary<string, double[]> LoadBendCoefficients()
+        {
+            var result = new Dictionary<string, double[]>();
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            using (Stream stream = assembly.GetManifestResourceStream("PoseEdit2026.Resources.PZ_TUM.txt"))
+            {
+                if (stream == null) return result;
+                using (StreamReader reader = new StreamReader(stream))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        string[] fields = line.Split(';').Where(f => f.Length > 0).ToArray();
+                        if (fields.Length < 10) continue;
+
+                        string tip = fields[0];
+                        double[] k = new double[9];
+                        for (int i = 0; i < 9; i++)
+                            k[i] = double.TryParse(fields[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : 0;
+                        result[tip] = k;
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Аналог min_boy/max_boy: A-F могут содержать диапазон вида "300-350" или "300~350".
+        // Без разделителя - значение как есть (с сохранением дробной части). С разделителем -
+        // min/max из чисел, округлённые до целого (как rtos с precision 0 в оригинале).
+        private static (double Min, double Max) ParseMinMax(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return (0, 0);
+
+            string translated = raw.Replace('-', ' ').Replace('~', ' ');
+            if (translated == raw)
+            {
+                double v = double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double val) ? val : 0;
+                return (v, v);
+            }
+
+            double[] parts = translated.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : 0)
+                .ToArray();
+            if (parts.Length == 0) return (0, 0);
+
+            return (Math.Round(parts.Min(), MidpointRounding.AwayFromZero), Math.Round(parts.Max(), MidpointRounding.AwayFromZero));
+        }
+
+        // ПЕРЕВЕДЕНО ИЗ: (defun b_h (tip A B C D E F BR cap / ) ...) — QUANTITY2.LSP
+        // tip — код типа гиба (00-99, как в RebarRecognizer), a..f — значения атрибутов A-F
+        // (возможно диапазоны "мин-макс"), r — значение атрибута R (радиус гиба, число).
+        public static string ComputeBendLength(string tip, string a, string b, string c, string d, string e, string f, string r)
+        {
+            tip = (tip ?? "").Trim();
+            if (!BendCoefficients.TryGetValue(tip, out double[] k)) return "L=";
+
+            var (aMin, aMax) = ParseMinMax(a);
+            var (bMin, bMax) = ParseMinMax(b);
+            var (cMin, cMax) = ParseMinMax(c);
+            var (dMin, dMax) = ParseMinMax(d);
+            var (eMin, eMax) = ParseMinMax(e);
+            var (fMin, fMax) = ParseMinMax(f);
+            double br = double.TryParse(r, NumberStyles.Float, CultureInfo.InvariantCulture, out double brVal) ? brVal : 0;
+
+            double min = k[0] * aMin + k[1] * bMin + k[2] * cMin + k[3] * dMin + k[4] * eMin + k[5] * fMin + k[6] * br;
+            double max = k[0] * aMax + k[1] * bMax + k[2] * cMax + k[3] * dMax + k[4] * eMax + k[5] * fMax + k[6] * br;
+
+            // Тип 77 (спираль) — особый случай в оригинале: результат умножается на A (число витков)
+            if (tip == "77")
+            {
+                min *= aMin;
+                max *= aMax;
+            }
+
+            string minStr = Math.Round(min, MidpointRounding.AwayFromZero).ToString("F0", CultureInfo.InvariantCulture);
+            string maxStr = Math.Round(max, MidpointRounding.AwayFromZero).ToString("F0", CultureInfo.InvariantCulture);
+            return min == max ? $"L={minStr}" : $"L={minStr}~{maxStr}";
         }
     }
 }

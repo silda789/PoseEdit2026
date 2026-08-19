@@ -1,0 +1,557 @@
+  latin_identifier = Word(initChars=alphas, bodyChars=alphanums + '_')
+  latin_identifier = Word(initChars=alphas, bodyChars=alphanums + '_')
+  vba_expr_str <<= infixNotation(vba_expr_str_item,
+  vba_expr_int <<= infixNotation(vba_expr_int_item,
+Encoding for stdout is only cp1251, will auto-encode text with utf8 before output
+olevba 0.60.2 on Python 3.13.2 - http://decalage.info/python/oletools
+===============================================================================
+FILE: BEAMDRAW.xlsm
+Type: OpenXML
+WARNING  For now, VBA stomping cannot be detected for files in memory
+-------------------------------------------------------------------------------
+VBA MACRO EsteLivro.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/EsteLivro'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Folha1.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Folha1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+Private Sub CommandButton1_Click()
+    
+    Dim H As Double
+    Dim B As Double
+    
+    
+    H = Val(Folha1.Cells(31, 9))
+    B = Val(Folha1.Cells(31, 7))
+    
+    Folha1.Cells(20, 13) = H
+    Folha1.Cells(20, 31) = H
+    Folha1.Cells(20, 49) = H
+    Folha1.Cells(20, 67) = H
+    Folha1.Cells(20, 85) = H
+    Folha1.Cells(20, 103) = H
+    Folha1.Cells(20, 121) = H
+    Folha1.Cells(20, 139) = H
+    
+    Folha1.Cells(20, 11) = B
+    Folha1.Cells(20, 29) = B
+    Folha1.Cells(20, 47) = B
+    Folha1.Cells(20, 65) = B
+    Folha1.Cells(20, 83) = B
+    Folha1.Cells(20, 101) = B
+    Folha1.Cells(20, 119) = B
+    Folha1.Cells(20, 137) = B
+    
+   End Sub
+
+Private Sub CommandButton10_Click()
+
+ '  ntramo = Val(Folha1.Cells(29, 9))
+ '  Dim a$(10)
+ '  k% = 0
+ '  For i% = 40 To 47
+ '  k% = k% + 1
+ '  nvalor = Val(Folha1.Cells(i%, 16))
+ '  valor = Val(Folha1.Cells(i%, 18))
+ ' nvalor1 = Val(Folha1.Cells(i%, 20))
+ '  valor1 = Val(Folha1.Cells(i%, 22))
+ ' If (nvalor1 = 0) Then
+ ' a$(i% - 39) = nvalor & Chr(248) & valor
+ ' Else
+ ' a$(i% - 39) = nvalor & Chr(248) & valor & " + " & nvalor1 & Chr(248) & valor1
+ ' End If
+ ' If k% > ntramo Then
+ ' Folha1.Cells(i%, 16) = ""
+ ' Folha1.Cells(i%, 18) = ""
+ ' Folha1.Cells(i%, 20) = ""
+ ' Folha1.Cells(i%, 22) = ""
+ ' End If
+ ' Next i%
+ '  Label2.Caption = a$(1)
+ ' Label3.Caption = a$(2)
+ ' Label4.Caption = a$(3)
+ ' Label5.Caption = a$(4)
+ ' Label6.Caption = a$(5)
+ ' Label7.Caption = a$(6)
+ ' Label8.Caption = a$(7)
+ ' Label9.Caption = a$(8)
+ 
+  Wrap$ = Chr$(13) + Chr$(10) ' criar a mudanзa de linha
+
+  Dim nlin%
+ 
+  nlin% = Val(Folha2.Cells(1, 1)) + 1
+
+
+For i% = 1 To nlin% '----------------------------
+   
+   ficheiro$ = ficheiro$ & "    "
+   
+   For j% = 1 To 26 '*-*-*-*-*-*-*-*-*-*-*-*-*
+   'nvalor = Val(Folha2.Cells(i%, j%))
+      
+   nvalor = Folha2.Cells(i%, j%)
+      
+      
+      
+   If nvalor = "" Then
+   w% = 1
+   ElseIf j% = 26 Then
+   ficheiro$ = ficheiro$ & nvalor & Wrap$
+   Else
+   ficheiro$ = ficheiro$ & nvalor & "     "
+   End If
+
+   Next j% '*-*-*-*-*-*-*-*-*-*-*-*-*
+
+Next i% '------------------------------------
+
+
+caminho$ = Folha1.Cells(3, 19) & "\"
+caminho$ = caminho$ & "beam.prn"
+
+'FName = Application.GetSaveAsFilename("ccc", "txt file (*.spe), *.spe")
+FN = FreeFile
+Open caminho$ For Output As #FN
+Print #FN, ficheiro$  'guardar a cadeia num ficheiro
+Close #FN                'fechar ficheiro
+
+
+
+
+
+'caminho$ = "C:\Dados\vigas\viga.prn"
+'Open caminho$ For Output As #1
+'Print #1, ficheiro$  'guardar a cadeia num ficheiro
+'Close #1                'fechar ficheiro
+End Sub
+
+Private Sub CommandButton11_Click()
+Dim valor As Integer
+Dim nvalor As Integer
+
+ntramo = Val(Folha1.Cells(29, 9))
+
+nvalor = Val(Folha1.Cells(40, 20))
+valor = Val(Folha1.Cells(40, 22))
+
+For i% = 41 To 47
+k% = k% + 1
+If k% < ntramo Then
+  Folha1.Cells(i%, 20) = nvalor
+  Folha1.Cells(i%, 22) = valor
+Else
+  Folha1.Cells(i%, 16) = ""
+  Folha1.Cells(i%, 18) = ""
+  Folha1.Cells(i%, 20) = ""
+  Folha1.Cells(i%, 22) = ""
+End If
+  
+
+
+
+
+Next i%
+
+End Sub
+
+Private Sub CommandButton12_Click()
+Dim valor As Integer
+Dim nvalor As Integer
+
+ntramo = Val(Folha1.Cells(29, 9))
+
+nvalor = Val(Folha1.Cells(40, 16))
+valor = Val(Folha1.Cells(40, 18))
+
+k% = 0
+For i% = 41 To 47
+k% = k% + 1
+If k% < ntramo Then
+  Folha1.Cells(i%, 16) = nvalor
+  Folha1.Cells(i%, 18) = valor
+Else
+  Folha1.Cells(i%, 16) = ""
+  Folha1.Cells(i%, 18) = ""
+  Folha1.Cells(i%, 20) = ""
+  Folha1.Cells(i%, 22) = ""
+End If
+
+Next i%
+
+
+End Sub
+
+
+
+Private Sub CommandButton13_Click()
+Dim valor As Integer
+Dim nvalor As Integer
+
+ntramo = Val(Folha1.Cells(29, 9))
+
+
+nvalor = Val(Folha1.Cells(32, 30))
+valor = Val(Folha1.Cells(32, 32))
+k% = 0
+For i% = 34 To 46 Step 2
+k% = k% + 1
+If k% < ntramo Then
+   Folha1.Cells(i%, 30) = nvalor
+   Folha1.Cells(i%, 32) = valor
+Else
+   Folha1.Cells(i%, 30) = ""
+   Folha1.Cells(i%, 32) = ""
+End If
+
+Next i%
+
+
+k% = 0
+For i% = 31 To 47 Step 2
+k% = k% + 1
+If k% > (ntramo + 1) Then
+    Folha1.Cells(i%, 33) = ""
+  Folha1.Cells(i%, 35) = ""
+End If
+Next i%
+
+
+
+
+
+
+
+End Sub
+
+Private Sub CommandButton14_Click()
+Dim valor As Integer
+Dim nvalor As Integer
+
+ntramo = Val(Folha1.Cells(29, 9))
+
+nvalor = Val(Folha1.Cells(31, 33))
+valor = Val(Folha1.Cells(31, 35))
+k% = 0
+For i% = 31 To 47 Step 2
+k% = k% + 1
+If k% <= (ntramo + 1) Then
+  Folha1.Cells(i%, 33) = nvalor
+  Folha1.Cells(i%, 35) = valor
+Else
+  Folha1.Cells(i%, 33) = ""
+  Folha1.Cells(i%, 35) = ""
+End If
+Next i%
+
+
+nvalor = Val(Folha1.Cells(32, 30))
+valor = Val(Folha1.Cells(32, 32))
+k% = 0
+For i% = 34 To 46 Step 2
+k% = k% + 1
+If k% < ntramo Then
+   Folha1.Cells(i%, 30) = nvalor
+   Folha1.Cells(i%, 32) = valor
+Else
+   Folha1.Cells(i%, 30) = ""
+   Folha1.Cells(i%, 32) = ""
+End If
+
+Next i%
+
+
+
+
+
+End Sub
+
+Private Sub CommandButton2_Click()
+
+    Dim dH As Double
+    
+    
+    
+    dH = Val(Folha1.Cells(33, 9))
+   
+    
+    'Folha1.Cells(20, 13) = H
+    Folha1.Cells(11, 30) = dH
+    Folha1.Cells(11, 48) = dH
+    Folha1.Cells(11, 66) = dH
+    Folha1.Cells(11, 84) = dH
+    Folha1.Cells(11, 102) = dH
+    Folha1.Cells(11, 120) = dH
+    Folha1.Cells(11, 138) = dH
+End Sub
+
+Private Sub CommandButton3_Click()
+Dim sa As Double
+    
+    
+    
+    sa = Val(Folha1.Cells(35, 9))
+      
+    Folha1.Cells(9, 7) = sa
+    Folha1.Cells(9, 25) = sa
+    Folha1.Cells(9, 43) = sa
+    Folha1.Cells(9, 61) = sa
+    Folha1.Cells(9, 79) = sa
+    Folha1.Cells(9, 97) = sa
+    Folha1.Cells(9, 115) = sa
+    Folha1.Cells(9, 133) = sa
+    Folha1.Cells(9, 151) = sa
+End Sub
+
+Private Sub CommandButton4_Click()
+ si = Val(Folha1.Cells(37, 9))
+      
+    Folha1.Cells(23, 7) = si
+    Folha1.Cells(23, 25) = si
+    Folha1.Cells(23, 43) = si
+    Folha1.Cells(23, 61) = si
+    Folha1.Cells(23, 79) = si
+    Folha1.Cells(23, 97) = si
+    Folha1.Cells(23, 115) = si
+    Folha1.Cells(23, 133) = si
+    Folha1.Cells(23, 151) = si
+End Sub
+
+Private Sub CommandButton5_Click()
+fi = Val(Folha1.Cells(31, 17))
+s = Val(Folha1.Cells(31, 18))
+      
+    Folha1.Cells(15, 11) = fi
+    Folha1.Cells(16, 29) = fi
+    Folha1.Cells(15, 47) = fi
+    Folha1.Cells(16, 65) = fi
+    Folha1.Cells(15, 83) = fi
+    Folha1.Cells(16, 101) = fi
+    Folha1.Cells(15, 119) = fi
+    Folha1.Cells(16, 137) = fi
+    
+    Folha1.Cells(15, 12) = s
+    Folha1.Cells(16, 30) = s
+    Folha1.Cells(15, 48) = s
+    Folha1.Cells(16, 66) = s
+    Folha1.Cells(15, 84) = s
+    Folha1.Cells(16, 102) = s
+    Folha1.Cells(15, 120) = s
+    Folha1.Cells(16, 138) = s
+    
+End Sub
+
+Private Sub CommandButton6_Click()
+fi = Val(Folha1.Cells(33, 17))
+s = Val(Folha1.Cells(33, 18))
+L = Val(Folha1.Cells(33, 22))
+
+ Folha1.Cells(20, 7) = L
+ Folha1.Cells(21, 25) = L
+ Folha1.Cells(20, 43) = L
+ Folha1.Cells(21, 61) = L
+ Folha1.Cells(20, 79) = L
+ Folha1.Cells(21, 97) = L
+ Folha1.Cells(20, 115) = L
+ Folha1.Cells(21, 133) = L
+ 
+ Folha1.Cells(20, 16) = L
+ Folha1.Cells(21, 34) = L
+ Folha1.Cells(20, 52) = L
+ Folha1.Cells(21, 70) = L
+ Folha1.Cells(20, 88) = L
+ Folha1.Cells(21, 106) = L
+ Folha1.Cells(20, 124) = L
+ Folha1.Cells(21, 142) = L
+ 
+Folha1.Cells(15, 7) = fi
+Folha1.Cells(16, 25) = fi
+Folha1.Cells(15, 43) = fi
+Folha1.Cells(16, 61) = fi
+Folha1.Cells(15, 79) = fi
+Folha1.Cells(16, 97) = fi
+Folha1.Cells(15, 115) = fi
+Folha1.Cells(16, 133) = fi
+ 
+Folha1.Cells(15, 16) = fi
+Folha1.Cells(16, 34) = fi
+Folha1.Cells(15, 52) = fi
+Folha1.Cells(16, 70) = fi
+Folha1.Cells(15, 88) = fi
+Folha1.Cells(16, 106) = fi
+Folha1.Cells(15, 124) = fi
+Folha1.Cells(16, 142) = fi
+ 
+Folha1.Cells(15, 8) = s
+Folha1.Cells(16, 26) = s
+Folha1.Cells(15, 44) = s
+Folha1.Cells(16, 62) = s
+Folha1.Cells(15, 80) = s
+Folha1.Cells(16, 98) = s
+Folha1.Cells(15, 116) = s
+Folha1.Cells(16, 134) = s
+ 
+Folha1.Cells(15, 17) = s
+Folha1.Cells(16, 35) = s
+Folha1.Cells(15, 53) = s
+Folha1.Cells(16, 71) = s
+Folha1.Cells(15, 89) = s
+Folha1.Cells(16, 107) = s
+Folha1.Cells(15, 125) = s
+Folha1.Cells(16, 143) = s
+
+
+End Sub
+
+Private Sub CommandButton7_Click()
+
+lv = Val(Folha1.Cells(35, 17))
+
+Folha1.Cells(11, 7) = lv
+Folha1.Cells(11, 25) = lv
+Folha1.Cells(11, 43) = lv
+Folha1.Cells(11, 61) = lv
+Folha1.Cells(11, 79) = lv
+Folha1.Cells(11, 97) = lv
+Folha1.Cells(11, 115) = lv
+Folha1.Cells(11, 133) = lv
+
+Folha1.Cells(11, 16) = lv
+Folha1.Cells(11, 34) = lv
+Folha1.Cells(11, 52) = lv
+Folha1.Cells(11, 70) = lv
+Folha1.Cells(11, 88) = lv
+Folha1.Cells(11, 106) = lv
+Folha1.Cells(11, 124) = lv
+Folha1.Cells(11, 142) = lv
+
+
+
+
+
+
+End Sub
+
+Private Sub CommandButton8_Click()
+
+lv = Val(Folha1.Cells(37, 17))
+n = Val(Folha1.Cells(29, 9))
+
+Folha1.Cells(11, 7) = lv
+
+n = 16 + (n - 1) * 18
+Folha1.Cells(11, n) = lv
+
+
+End Sub
+
+Private Sub CommandButton9_Click()
+
+L1 = Val(Folha1.Cells(40, 9))
+l2 = Val(Folha1.Cells(41, 9))
+l3 = Val(Folha1.Cells(42, 9))
+l4 = Val(Folha1.Cells(43, 9))
+L5 = Val(Folha1.Cells(44, 9))
+l6 = Val(Folha1.Cells(45, 9))
+l7 = Val(Folha1.Cells(46, 9))
+l8 = Val(Folha1.Cells(47, 9))
+
+
+Folha1.Cells(24, 11) = L1
+Folha1.Cells(24, 29) = l2
+Folha1.Cells(24, 47) = l3
+Folha1.Cells(24, 65) = l4
+Folha1.Cells(24, 83) = L5
+Folha1.Cells(24, 101) = l6
+Folha1.Cells(24, 119) = l7
+Folha1.Cells(24, 137) = l8
+
+
+End Sub
+
+
+
+
+
+
+-------------------------------------------------------------------------------
+VBA MACRO Folha2.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Folha2'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+Private Sub CommandButton1_Click()
+
+
+  Wrap$ = Chr$(13) + Chr$(10) ' criar a mudanзa de linha
+
+  Dim nlin%
+ 
+  nlin% = Val(Folha2.Cells(1, 1)) + 1
+
+
+For i% = 1 To nlin% '----------------------------
+   
+   ficheiro$ = ficheiro$ & "    "
+   
+   For j% = 1 To 23 '*-*-*-*-*-*-*-*-*-*-*-*-*
+   nvalor = Val(Folha2.Cells(i%, j%))
+      
+   If nvalor = "" Then
+   w% = 1
+   ElseIf j% = 23 Then
+   ficheiro$ = ficheiro$ & nvalor & Wrap$
+   Else
+   ficheiro$ = ficheiro$ & nvalor & "     "
+   End If
+
+   Next j% '*-*-*-*-*-*-*-*-*-*-*-*-*
+
+Next i% '------------------------------------
+
+
+caminho$ = "C:\Dados\vigas\viga.prn"
+Open caminho$ For Output As #1
+Print #1, ficheiro$  'guardar a cadeia num ficheiro
+Close #1                'fechar ficheiro
+End Sub
+-------------------------------------------------------------------------------
+VBA MACRO Folha3.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Folha3'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO UserForm1.frm 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/UserForm1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Module1.bas 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Module1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Sub UnprotectAllSheets()
+    Dim ws As Worksheet
+    For Each ws In ThisWorkbook.Worksheets
+        On Error Resume Next
+        ws.Unprotect Password:=""
+        On Error GoTo 0
+    Next ws
+    MsgBox "Защита снята со всех листов!"
+End Sub
++----------+--------------------+---------------------------------------------+
+|Type      |Keyword             |Description                                  |
++----------+--------------------+---------------------------------------------+
+|AutoExec  |CommandButton1_Click|Runs when the file is opened and ActiveX     |
+|          |                    |objects trigger events                       |
+|Suspicious|Open                |May open a file                              |
+|Suspicious|Output              |May write to a file (if combined with Open)  |
+|Suspicious|Print #             |May write to a file (if combined with Open)  |
+|Suspicious|Chr                 |May attempt to obfuscate specific strings    |
+|          |                    |(use option --deobf to deobfuscate)          |
+|Suspicious|Hex Strings         |Hex-encoded strings were detected, may be    |
+|          |                    |used to obfuscate strings (option --decode to|
+|          |                    |see all)                                     |
++----------+--------------------+---------------------------------------------+
+

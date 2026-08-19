@@ -1,0 +1,162 @@
+// ====================================================================================
+// ФАЙЛ: BeamData.cs
+// НАЗНАЧЕНИЕ: Модель данных балки/ригеля для BEAMDRAW - то, что раньше вводилось в
+//             широкую таблицу Excel (лист Folha1 в BEAMDRAW.xlsm, см. BEAMDRAW\Temp).
+//             Один Beam = одна балка, состоящая из нескольких пролётов (BeamSpan).
+// ====================================================================================
+// СХЕМА ДАННЫХ ВЗЯТА ИЗ СТАРОГО EXCEL-ИНСТРУМЕНТА (BEAMDRAW\Temp\BEAMDRAW.xlsm,
+// BEAMDRAW\Temp\screenshots): у балки есть общие ("на всю балку") хомуты и параметры
+// сечения по умолчанию, и у каждого пролёта - своя длина, привязки, арматура.
+// Точная методика построения чертежа (как из этих чисел получить сам чертёж - шаг
+// хомутов у опор/в пролёте, крюки, анкеровка) пока не задана - будет описана позже.
+// ====================================================================================
+#nullable disable
+using System.Collections.Generic; // Даёт нам List<T> - список элементов одного типа.
+using System.Collections.ObjectModel; // Даёт нам ObservableCollection<T> - см. ниже.
+
+namespace BEAMDRAW
+{
+    // "public class BeamSpan" - описываем НОВЫЙ ТИП данных под названием BeamSpan.
+    // Это как "чертёж" одной строки таблицы: когда мы напишем "new BeamSpan()",
+    // C# создаст в памяти объект с такими полями (Length, As, Ai и т.д.).
+    // Один пролёт балки - одна строка в таблице данных.
+    public class BeamSpan
+    {
+        // "public double Length { get; set; }" - это "свойство" (property).
+        // double - тип данных "дробное число" (например 3.5, 12.75).
+        // { get; set; } - автоматически создаёт и "прочитать значение", и "записать
+        // новое значение". Это позволяет WPF-таблице (DataGrid) напрямую читать и
+        // менять эти поля, когда пользователь печатает в ячейке.
+        //
+        // "L" - длина пролёта, ММ (в старом Excel было в метрах - колонка Li; тут везде
+        // миллиметры, как принято в остальном PoseEdit2026, по просьбе пользователя
+        // 2026-08-16 - см. [[session_handoff]]).
+        public double Length { get; set; }
+
+        // "as" / "ai" - привязки/отступы у левой и правой опоры пролёта, мм.
+        public double As { get; set; }
+        public double Ai { get; set; }
+
+        // "dH" - перепад высоты сечения (для уступов балки), мм. Обычно 0.
+        public double DH { get; set; }
+
+        // Сечение пролёта B x H, мм. По умолчанию берётся из Beam.DefaultB/DefaultH.
+        public double B { get; set; }
+        public double H { get; set; }
+
+        // Нижняя арматура (As1/As2 в старом Excel) - до двух групп стержней.
+        // int - тип данных "целое число" (без дробной части) - тут это количество
+        // стержней, дробным оно быть не может.
+        public int BottomAs1Count { get; set; }
+        public double BottomAs1Diameter { get; set; }
+        public int BottomAs2Count { get; set; }
+        public double BottomAs2Diameter { get; set; }
+
+        // Верхняя арматура - до двух групп стержней.
+        public int TopAs1Count { get; set; }
+        public double TopAs1Diameter { get; set; }
+        public int TopAs2Count { get; set; }
+        public double TopAs2Diameter { get; set; }
+
+        // Тип сечения - хранит КЛЮЧ (SectionTypeOption.Key), например "SlabSlab", а не
+        // готовый текст на каком-то одном языке. Так переключение языка интерфейса
+        // (см. BeamDrawWindow.xaml.cs, SetLanguage) не "теряет" уже выбранное значение -
+        // ключ один и тот же независимо от того, какой язык сейчас показан на экране.
+        public string SectionType { get; set; }
+
+        // Один вариант типа сечения: язык-независимый Key (для хранения в данных) +
+        // подпись на русском и на английском (для показа пользователю - см.
+        // DataGridComboBoxColumn.DisplayMemberPath в BeamDrawWindow.xaml, который
+        // переключается между DisplayRu/DisplayEn).
+        public class SectionTypeOption
+        {
+            public string Key { get; set; }
+            public string DisplayRu { get; set; }
+            public string DisplayEn { get; set; }
+        }
+
+        // "static readonly List<...>" - это ОБЩИЙ для всех BeamSpan список (не у
+        // каждого пролёта свой, а один на весь проект), и его нельзя поменять после
+        // создания (readonly = "только для чтения" после инициализации).
+        // Список типов сечения - переписан со скриншота старого Excel-инструмента
+        // (легенда "Section type" в BEAMDRAW\Temp\screenshots). Предварительный список,
+        // уточним, когда будет описана методика черчения.
+        public static readonly List<SectionTypeOption> SectionTypeOptions = new List<SectionTypeOption>
+        {
+            new SectionTypeOption { Key = "SlabSlab", DisplayRu = "Плита - плита", DisplayEn = "Slab - Slab" },
+            new SectionTypeOption { Key = "NoSlabSlab", DisplayRu = "Без плиты - плита", DisplayEn = "Without slab - Slab" },
+            new SectionTypeOption { Key = "SlabNoSlab", DisplayRu = "Плита - без плиты", DisplayEn = "Slab - Without slab" },
+            new SectionTypeOption { Key = "NoSlabNoSlab", DisplayRu = "Без плиты - без плиты", DisplayEn = "Without slab - Without slab" },
+            new SectionTypeOption { Key = "InvSlabSlab", DisplayRu = "Перевёрнутое: плита - плита", DisplayEn = "Inverted: Slab - Slab" },
+            new SectionTypeOption { Key = "InvNoSlabSlab", DisplayRu = "Перевёрнутое: без плиты - плита", DisplayEn = "Inverted: Without slab - Slab" },
+            new SectionTypeOption { Key = "InvSlabNoSlab", DisplayRu = "Перевёрнутое: плита - без плиты", DisplayEn = "Inverted: Slab - Without slab" },
+        };
+    }
+
+    // Балка целиком: имя/номер, общие ("на всю балку") хомуты и параметры сечения по
+    // умолчанию, и список пролётов.
+    public class Beam
+    {
+        // "= "BEAM 1"" после свойства - это значение "по умолчанию": оно записывается
+        // сразу при создании объекта (new Beam()), ещё до того, как мы явно что-то
+        // присвоим сами. Так поля не остаются "пустыми"/нулевыми без причины.
+        // Название/номер балки, например "BEAM B 1".
+        public string Name { get; set; } = "BEAM 1";
+
+        // Хомуты - общие на всю балку (в старом Excel это тоже было одно значение на
+        // всю балку, не на пролёт): диаметр, шаг "в пролёте" и шаг "у опоры" на длине
+        // StirrupSupportZoneLength от каждой опоры. Всё в ММ.
+        public double StirrupDiameter { get; set; } = 8;
+        public double StirrupSpacingGeneral { get; set; } = 200;
+        public double StirrupSpacingSupport { get; set; } = 150;
+        public double StirrupSupportZoneLength { get; set; } = 1200;
+
+        // Значения по умолчанию для новых пролётов и для кнопок "Применить ко всем". Мм.
+        public double DefaultB { get; set; } = 250;
+        public double DefaultH { get; set; } = 600;
+        public double DefaultAs { get; set; } = 250;
+        public double DefaultAi { get; set; } = 250;
+        public double DefaultDH { get; set; } = 0;
+
+        public int DefaultBottomAs1Count { get; set; } = 2;
+        public double DefaultBottomAs1Diameter { get; set; } = 12;
+        public int DefaultBottomAs2Count { get; set; }
+        public double DefaultBottomAs2Diameter { get; set; }
+
+        public int DefaultTopAs1Count { get; set; } = 2;
+        public double DefaultTopAs1Diameter { get; set; } = 16;
+        public int DefaultTopAs2Count { get; set; }
+        public double DefaultTopAs2Diameter { get; set; }
+
+        // ObservableCollection<T> - это "список, который умеет сообщать об изменениях".
+        // Обычный List<T> молчит, когда мы добавляем/удаляем элементы - WPF-таблица
+        // (DataGrid) об этом не узнает и не обновит строки на экране. ObservableCollection
+        // сама "оповещает" таблицу при Add()/Remove(), и строка сразу появляется/исчезает
+        // на экране без дополнительного кода. Поэтому список пролётов делаем именно таким.
+        public ObservableCollection<BeamSpan> Spans { get; set; } = new ObservableCollection<BeamSpan>();
+
+        // Создаёт новый пролёт, заполненный текущими значениями по умолчанию -
+        // используется и кнопкой "Добавить пролёт", и при первом открытии окна.
+        public BeamSpan CreateDefaultSpan()
+        {
+            return new BeamSpan
+            {
+                Length = 3000,
+                As = DefaultAs,
+                Ai = DefaultAi,
+                DH = DefaultDH,
+                B = DefaultB,
+                H = DefaultH,
+                BottomAs1Count = DefaultBottomAs1Count,
+                BottomAs1Diameter = DefaultBottomAs1Diameter,
+                BottomAs2Count = DefaultBottomAs2Count,
+                BottomAs2Diameter = DefaultBottomAs2Diameter,
+                TopAs1Count = DefaultTopAs1Count,
+                TopAs1Diameter = DefaultTopAs1Diameter,
+                TopAs2Count = DefaultTopAs2Count,
+                TopAs2Diameter = DefaultTopAs2Diameter,
+                SectionType = BeamSpan.SectionTypeOptions[0].Key,
+            };
+        }
+    }
+}

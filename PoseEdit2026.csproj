@@ -9,6 +9,27 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- BEAMDRAW - отдельный проект в подпапке этого же репозитория. Явно исключаем его файлы
+       из автоматического glob-сборщика PoseEdit2026 (иначе SDK рекурсивно подхватит
+       BEAMDRAW\*.cs и даже его obj\*.cs, что даёт дублирующиеся сборочные атрибуты). -->
+  <ItemGroup>
+    <Compile Remove="BEAMDRAW\**" />
+    <EmbeddedResource Remove="BEAMDRAW\**" />
+    <None Remove="BEAMDRAW\**" />
+    <Page Remove="BEAMDRAW\**" />
+    <Resource Remove="BEAMDRAW\**" />
+  </ItemGroup>
+
+  <!-- Resources\Standard\ - 96 DWG-шаблонов (PZ_00.dwg...PZ_95.dwg) для PZREDEFN
+       (LegacyCommands.cs). Через wildcard, а не по одному файлу, как Shape_XX.png ниже -
+       файлов слишком много (96), и для встроенных DWG-ресурсов (в отличие от WPF
+       Resource-картинок) не нужна отдельная возня с AutoGenerateBindingRedirects и т.п. -
+       обычный EmbeddedResource, тот же приём, что и для RL-POS.dwg/RL-POS2.dwg ниже. -->
+  <ItemGroup>
+    <None Remove="Resources\Standard\*.dwg" />
+    <EmbeddedResource Include="Resources\Standard\*.dwg" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="Resources\RL-POS.dwg" />
     <None Remove="Resources\RL-POS2.dwg" />
@@ -106,12 +127,15 @@
     <None Remove="Resources\Shape_91.png" />
     <None Remove="Resources\Shape_92.png" />
     <None Remove="Resources\Shape_93.png" />
-    <!-- Файлы Shape_94.png - Shape_99.png удалены, так как в папке Resources теперь только 94 картинки (00-93) -->
+    <None Remove="Resources\Shape_94.png" />
+    <None Remove="Resources\Shape_95.png" />
+    <!-- Файлы Shape_96.png - Shape_99.png не существуют - в папке Resources 96 картинок (00-95) -->
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\RL-POS.dwg" />
     <EmbeddedResource Include="Resources\RL-POS2.dwg" />
+    <EmbeddedResource Include="Resources\PZ_TUM.txt" />
   </ItemGroup>
 
   <!-- AutoCAD 2024: .NET Framework 4.8 -->
@@ -223,7 +247,9 @@
     <Resource Include="Resources\Shape_91.png" />
     <Resource Include="Resources\Shape_92.png" />
     <Resource Include="Resources\Shape_93.png" />
-    <!-- Файлы Shape_94.png - Shape_99.png удалены, так как в папке Resources теперь только 94 картинки (00-93) -->
+    <Resource Include="Resources\Shape_94.png" />
+    <Resource Include="Resources\Shape_95.png" />
+    <!-- Файлы Shape_96.png - Shape_99.png не существуют - в папке Resources 96 картинок (00-95) -->
   </ItemGroup>
 
 </Project>
