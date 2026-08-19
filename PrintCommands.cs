@@ -344,6 +344,17 @@ namespace PoseEdit2026
                 PlotInfoValidator piv = new PlotInfoValidator { MediaMatchingPolicy = MatchingPolicy.MatchEnabled };
                 piv.Validate(pi);
 
+                // "Apply to Layout" - то же самое, что кнопка "Apply to Layout" в обычном
+                // диалоге печати AutoCAD (Файл -> Печать -> Window -> "Apply to Layout"):
+                // сохраняем итоговые (уже провалидированные psv/piv) настройки печати прямо
+                // в сам объект Layout чертежа, а не только используем их "на лету" для
+                // текущей печати. Без этого шага следующая РУЧНАЯ печать этого листа
+                // (Ctrl+P) в диалоге показывала бы старые/пустые настройки Window, а не
+                // тот прямоугольник рамки, который MAGICPRINT только что нашёл и напечатал -
+                // Layout нужно открыть на запись (UpgradeOpen), он был открыт ForRead выше.
+                layout.UpgradeOpen();
+                layout.CopyFrom(ps);
+
                 tr.Commit();
                 return pi;
             }
