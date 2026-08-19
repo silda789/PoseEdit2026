@@ -1367,8 +1367,10 @@ namespace PoseEdit2026
             }
         }
 
-        // Извлекает встроенный DWG-ресурс во временный файл (аналог логики в Commands.cs)
-        private static void ExtractEmbeddedResource(string resourceName, string destPath)
+        // Извлекает встроенный DWG-ресурс во временный файл (аналог логики в Commands.cs).
+        // internal (не private) - переиспользуется из QuantityTableGenerator.cs
+        // (TryInsertPzBlock, эскизы форм в таблице RQTN) - тот же приём, что и здесь.
+        internal static void ExtractEmbeddedResource(string resourceName, string destPath)
         {
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
             using (var stream = asm.GetManifestResourceStream(resourceName))
