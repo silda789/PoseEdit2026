@@ -360,6 +360,18 @@ namespace PoseEdit2026
                     txtSpace.Text = attributes["ARALIK"];
                 }
 
+                // TIK: "0" = позиция уже на выпущенном/согласованном чертеже - POZVERN её
+                // не трогает; любое другое значение (включая пустое/отсутствующее - для
+                // новых, ещё не сохранённых блоков) считаем "1" = можно перенумеровать.
+                if (attributes.ContainsKey("TIK") && attributes["TIK"] == "0")
+                {
+                    rbTik0.IsChecked = true;
+                }
+                else
+                {
+                    rbTik1.IsChecked = true;
+                }
+
                 // Загрузка значения Note из атрибута (если есть)
                 if (attributes.ContainsKey("NOTE"))
                 {
@@ -636,6 +648,7 @@ namespace PoseEdit2026
                 // строки TB - иначе ParseTB при следующем открытии путает длину с диаметром
                 newValues["BOY"] = txtLength.Text.Trim();
                 newValues["TIP"] = txtType.Text;
+                newValues["TIK"] = rbTik0.IsChecked == true ? "0" : "1";
 
                 // Сохраняем ARALIK (SPACE) - шаг арматуры отдельным атрибутом
                 if (!string.IsNullOrWhiteSpace(txtSpace.Text))
@@ -835,6 +848,7 @@ namespace PoseEdit2026
                     // BOY - отдельный атрибут, не часть строки TB (см. btnUpdate_Click)
                     ["BOY"]  = txtLength.Text.Trim(),
                     ["TIP"]  = txtType.Text,
+                    ["TIK"]  = rbTik0.IsChecked == true ? "0" : "1",
                     ["A"]    = GetValueOrTag(txtA),
                     ["B"]    = GetValueOrTag(txtB),
                     ["C"]    = GetValueOrTag(txtC),

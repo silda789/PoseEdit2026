@@ -371,8 +371,11 @@
                     <!-- Колонка 3: Update All -->
                     <ColumnDefinition Width="*"/>
                     <!-- Колонка 4: Settings -->
-                    <ColumnDefinition Width="*"/>
-                        <!-- Колонка 5: Правая колонка (Preview) - здесь будет Tik -->
+                    <ColumnDefinition Width="Auto"/>
+                        <!-- Колонка 5: Tik (0/1) - переопределяет, надо ли пересчитывать POZ этой
+                             позиции командой POZVERN. 0 = позиция уже на выпущенном/согласованном
+                             чертеже, номер трогать нельзя. 1 = новая/изменённая, номер можно
+                             присвоить заново. См. LegacyCommands.AutoNumberPositionsCommand (POZVERN). -->
                     </Grid.ColumnDefinitions>
 
                         <!-- Все 5 кнопок равномерно распределены по колонкам с одинаковыми расстояниями -->
@@ -382,7 +385,19 @@
                     <Button x:Name="btnUpdateAll" Grid.Column="3" Content="Update All" Height="35" Click="btnUpdateAll_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,5,0"/>
                     <Button x:Name="btnSettings" Grid.Column="4" Content="Settings" Height="35" Click="btnSettings_Click" Width="100" HorizontalAlignment="Center" Margin="5,0,0,0"/>
 
-                   
+                    <!--
+                        RadioButton - как чекбокс, но выбрать можно только ОДИН вариант из
+                        группы (GroupName="Tik" делает rbTik0/rbTik1 такой группой - отметить
+                        оба одновременно нельзя). Ничего не подписано на Checked - эти кнопки
+                        просто хранят состояние, которое читается при сохранении
+                        (btnUpdate_Click/btnUpdateAll_Click) и выставляется при загрузке
+                        (LoadDataFromBlock), без побочных действий по клику.
+                    -->
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Label Content="Tik:" VerticalAlignment="Center" Margin="10,0,3,0"/>
+                        <RadioButton x:Name="rbTik0" Content="0" GroupName="Tik" VerticalAlignment="Center" Margin="2,0"/>
+                        <RadioButton x:Name="rbTik1" Content="1" GroupName="Tik" VerticalAlignment="Center" Margin="8,0,2,0" IsChecked="True"/>
+                    </StackPanel>
                 </Grid>
                 </Grid>
             </Grid>
