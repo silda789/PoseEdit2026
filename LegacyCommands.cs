@@ -1513,5 +1513,107 @@ namespace PoseEdit2026
 
             ed.WriteMessage($"\n{selRes.Value.Count} poz \"ren.mtr.tb\" katmanina tasindi.");
         }
+
+        // ====================================================================================
+        // КОМАНДА: PZREDEFN (было "PZREDEF" в LISP)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: переопределяет определения блоков PZ_00...PZ_95 (эталонные формы
+        // арматуры, используемые семейством инструментов QUANTITY) из встроенных DWG-
+        // шаблонов (Resources/Standard/PZ_XX.dwg) и досинхронизирует атрибуты у всех
+        // найденных в чертеже экземпляров этих блоков - тот же приём, что и PZGN выше
+        // (SyncAttributesToDefinition), просто по 96 именам блоков вместо одного RL-POS.
+        // ПЕРЕВЕДЕНО ИЗ: (defun c:PZREDEF (/) ...) - POSREDEF.LSP, строки 44-53, которая
+        // вызывает (defun ReDef ...) (автор - Lee Mac, строки 2-42 того же файла).
+        //
+        // ОТЛИЧИЕ ОТ ОРИГИНАЛА: оригинальный PZREDEF первым делом вызывал
+        // metraj_layer_olustur - настройку слоёв и текстового стиля из ОТДЕЛЬНОГО набора
+        // файлов (Standard/REN_QT_layer_file.txt + шрифт "GOST Common.ttf"), которых нет
+        // ни в этом репозитории, ни в Temp/, и которые концептуально не имеют отношения
+        // к самому переопределению блоков. Этот шаг сознательно НЕ портирован - если
+        // нужны стандартные слои, для этого уже есть отдельная команда CREATELAYERS/CL.
+        // PZREDEFN делает только то, что заявлено в названии - переопределяет блоки.
+        //
+        // ВНИМАНИЕ: это операция массового изменения по ВСЕМ 96 блокам PZ_00...PZ_95 -
+        // сохраните чертёж перед запуском (как и у PZGN).
+        [CommandMethod("PZREDEFN")]
+        public static void RedefineStandardShapeBlocksCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            string confirm = ReadLine(ed,
+                "\nBu islem PZ_00...PZ_95 bloklarinin TUMUNU guncel sablonlarla yeniden tanimlayacak. " +
+                "Once cizimi kaydedin. Devam edilsin mi? (Evet/Hayir): ");
+            if (!string.Equals(confirm, "Evet", StringComparison.OrdinalIgnoreCase)) return;
+
+            int redefined = 0;
+            int missing = 0;
+            int syncedInstances = 0;
+
+            // "i.ToString("D2")" - тот же приём, что и в PoseEditWindow.xaml.cs для списка
+            // форм: превращает 0,1,2... в "00","01","02"... - имена блоков и файлов
+            // именно двузначные (PZ_00, PZ_01, ..., PZ_95).
+            for (int i = 0; i <= 95; i++)
+            {
+                string code = i.ToString("D2");
+                string blockName = "PZ_" + code;
+
+                // Имя встроенного ресурса = "ИмяПроекта.Папка.Подпапка.Файл.dwg" - тот же
+                // принцип именования, что и у ResourceName1/ResourceName2 в Commands.cs,
+                // просто с дополнительной подпапкой "Standard".
+                string resourceName = $"PoseEdit2026.Resources.Standard.PZ_{code}.dwg";
+                string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), blockName + "_redef.dwg");
+
+                try
+                {
+                    ExtractEmbeddedResource(resourceName, tempFile);
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\n{blockName}: sablon bulunamadi ({ex.Message}), atlandi.");
+                    missing++;
+                    continue;
+                }
+
+                // db.Insert(blockName, sourceDb, false) - тот же приём, что и в PZGN выше:
+                // напрямую обновляет (или создаёт, если блока ещё не было) ОПРЕДЕЛЕНИЕ
+                // блока в таблице блоков чертежа из содержимого внешнего DWG-файла. Не
+                // нужно, в отличие от оригинального LISP-приёма Lee Mac, вставлять блок
+                // в пространство модели и тут же удалять - .NET API даёт это напрямую.
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    Database sourceDb = new Database(false, true);
+                    sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, null);
+                    db.Insert(blockName, sourceDb, false);
+                    sourceDb.Dispose();
+                    tr.Commit();
+                }
+                redefined++;
+
+                // Синхронизируем атрибуты у всех экземпляров ИМЕННО ЭТОГО блока, если
+                // такие есть в чертеже (в обычном рабочем процессе PZ_XX почти никогда не
+                // вставляются напрямую - EEN/RQTN их не используют, см. CLAUDE.md - но
+                // ATTSYNC-аналог на блоке без единого экземпляра просто ничего не находит
+                // и не делает, это безопасно и недорого проверить на каждой итерации).
+                TypedValue[] filterList =
+                [
+                    new TypedValue((int)DxfCode.Start, "INSERT"),
+                    new TypedValue((int)DxfCode.BlockName, blockName)
+                ];
+                PromptSelectionResult selRes = ed.SelectAll(new SelectionFilter(filterList));
+                if (selRes.Status == PromptStatus.OK)
+                {
+                    foreach (ObjectId id in selRes.Value.GetObjectIds())
+                    {
+                        SyncAttributesToDefinition(db, id);
+                        syncedInstances++;
+                    }
+                }
+            }
+
+            ed.WriteMessage($"\nPZREDEFN: {redefined} blok yeniden tanimlandi, {missing} sablon bulunamadi, {syncedInstances} ornek senkronize edildi.");
+        }
     }
 }

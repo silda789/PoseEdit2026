@@ -20,6 +20,16 @@
     <Resource Remove="BEAMDRAW\**" />
   </ItemGroup>
 
+  <!-- Resources\Standard\ - 96 DWG-шаблонов (PZ_00.dwg...PZ_95.dwg) для PZREDEFN
+       (LegacyCommands.cs). Через wildcard, а не по одному файлу, как Shape_XX.png ниже -
+       файлов слишком много (96), и для встроенных DWG-ресурсов (в отличие от WPF
+       Resource-картинок) не нужна отдельная возня с AutoGenerateBindingRedirects и т.п. -
+       обычный EmbeddedResource, тот же приём, что и для RL-POS.dwg/RL-POS2.dwg ниже. -->
+  <ItemGroup>
+    <None Remove="Resources\Standard\*.dwg" />
+    <EmbeddedResource Include="Resources\Standard\*.dwg" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="Resources\RL-POS.dwg" />
     <None Remove="Resources\RL-POS2.dwg" />
