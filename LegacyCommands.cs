@@ -964,7 +964,18 @@ namespace PoseEdit2026
             PromptSelectionResult selRes = ed.GetSelection(selOpts, RlPosFilter());
 
             List<ObjectId> eset;
-            int sonPoz = 0;
+
+            // sonPoz - максимальный уже занятый номер POZ среди ВСЕХ блоков RL-POS в
+            // ЧЕРТЕЖЕ (не только в текущей выборке). ВАЖНО (баг найден пользователем
+            // 2026-08-19): раньше здесь было "= 0" в обычном режиме (прямой выбор) -
+            // из-за этого при запуске POZVERN несколько раз подряд на разных
+            // выборках/листах одного чертежа каждый запуск начинал нумерацию заново
+            // с 1, и разные по диаметру позиции с разных запусков получали
+            // ОДИНАКОВЫЙ POZ (например "Поз. 5" одновременно у ⌀32 с одного листа и
+            // ⌀36 с другого) - GetMaxPoz сканирует весь чертёж, а не только то, что
+            // выбрано сейчас, так что каждый следующий запуск продолжает нумерацию,
+            // а не начинает её заново.
+            int sonPoz = GetMaxPoz(ed);
 
             if (selRes.Status != PromptStatus.OK)
             {
@@ -981,12 +992,9 @@ namespace PoseEdit2026
                     if (tik == "0") esetOnce.Add(id); else eset.Add(id);
                 }
 
-                foreach (ObjectId id in esetOnce)
-                {
-                    var a = BlockHelper.GetAttributes(id);
-                    if (int.TryParse(a.TryGetValue("POZ", out string p) ? p : "0", out int pv))
-                        sonPoz = Math.Max(sonPoz, pv);
-                }
+                // sonPoz уже посчитан по всему чертежу (см. GetMaxPoz выше) - пересчитывать
+                // его заново только по esetOnce не нужно, esetOnce - лишь подмножество всех
+                // блоков, его максимум не может быть больше глобального.
 
                 for (int i = eset.Count - 1; i >= 0; i--)
                 {
@@ -1070,6 +1078,27 @@ namespace PoseEdit2026
 
             ed.Regen();
             ed.WriteMessage($"\n{selRes.Value.Count} pozun POZ numarasi sifirlandi.");
+        }
+
+        // Сканирует ВЕСЬ чертёж (не только текущую выборку) и возвращает максимальный
+        // уже использованный номер POZ среди всех блоков RL-POS. Используется POZVERN,
+        // чтобы повторные запуски на разных подвыборках (например, по одному листу за
+        // раз) продолжали нумерацию, а не начинали её каждый раз заново с 1.
+        // ed.SelectAll(...) - выбирает объекты программно, без запроса к пользователю
+        // (в отличие от ed.GetSelection) - выполняется "тихо", пользователь этого не видит.
+        private static int GetMaxPoz(Editor ed)
+        {
+            int max = 0;
+            PromptSelectionResult allRes = ed.SelectAll(RlPosFilter());
+            if (allRes.Status != PromptStatus.OK) return max;
+
+            foreach (ObjectId id in allRes.Value.GetObjectIds())
+            {
+                var a = BlockHelper.GetAttributes(id);
+                if (int.TryParse(a.TryGetValue("POZ", out string p) ? p : "0", out int pv))
+                    max = Math.Max(max, pv);
+            }
+            return max;
         }
 
         // Ключ идентичности геометрии позиции (аналог poz_icin_oku): совпадение этих полей
