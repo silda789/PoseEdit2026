@@ -362,6 +362,18 @@ namespace PoseEdit2026
                 PlotInfoValidator piv = new PlotInfoValidator { MediaMatchingPolicy = MatchingPolicy.MatchEnabled };
                 piv.Validate(pi);
 
+                // ВРЕМЕННАЯ диагностика (2026-08-19) - проверяем, что Validate() НЕ подменил
+                // наши настройки поворота/окна печати на что-то другое (убрать после
+                // диагностики).
+                Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage(
+                    $"\nMAGICPRINT DIAG2: {sheet.LayoutName}: after Validate - " +
+                    $"PlotType={ps.PlotType}, PlotRotation={ps.PlotRotation}, " +
+                    $"PlotWindowArea=({ps.PlotWindowArea.MinPoint.X:F1},{ps.PlotWindowArea.MinPoint.Y:F1})-" +
+                    $"({ps.PlotWindowArea.MaxPoint.X:F1},{ps.PlotWindowArea.MaxPoint.Y:F1}), " +
+                    $"PlotOrigin=({ps.PlotOrigin.X:F1},{ps.PlotOrigin.Y:F1}), " +
+                    $"PlotCentered={ps.PlotCentered}, StdScale={ps.StdScaleType}, " +
+                    $"CanonicalMedia={ps.CanonicalMediaName}");
+
                 // "Apply to Layout" - то же самое, что кнопка "Apply to Layout" в обычном
                 // диалоге печати AutoCAD (Файл -> Печать -> Window -> "Apply to Layout"):
                 // сохраняем итоговые (уже провалидированные psv/piv) настройки печати прямо
