@@ -175,8 +175,16 @@ namespace PoseEdit2026
             // ШАГ 3: печать. doc.LockDocument() - обязательная блокировка документа перед
             // тем, как менять/использовать его через код (тот же приём, что и во всех
             // остальных командах этого проекта, которые правят чертёж программно).
+            //
+            // BuildPlotInfo переключает текущий лист (LayoutManager.Current.CurrentLayout)
+            // для каждого печатаемого листа по очереди - запоминаем, какой лист был активен
+            // ДО запуска команды, чтобы вернуть пользователя туда же после печати (тот же
+            // приём save/restore, что и в RoutineCommands.LAYSHIFT/LAYRENUM).
             // ================================================================================
+            string originalActiveLayout = LayoutManager.Current.CurrentLayout;
+
             using (doc.LockDocument())
+            try
             {
                 PlotEngine pe = PlotFactory.CreatePublishEngine();
                 using (pe)
@@ -239,12 +247,30 @@ namespace PoseEdit2026
                     }
                 }
             }
+            finally
+            {
+                // Возвращаем пользователя на тот лист, что был активен до запуска команды -
+                // BuildPlotInfo переключал текущий лист много раз подряд во время печати.
+                try { LayoutManager.Current.CurrentLayout = originalActiveLayout; }
+                catch (System.Exception) { /* лист удалён/недоступен - остаёмся где есть */ }
+            }
         }
 
         // Собирает и валидирует PlotInfo для одного листа - вынесено в отдельный метод,
         // потому что вызывается по одному разу на каждый лист внутри цикла печати выше.
+        //
+        // ВАЖНО (баг найден и исправлен 2026-08-19, третий крэш подряд после фиксов
+        // FindMatchingMedia и SetPlotType/SetPlotWindowArea): PlotInfoValidator.Validate
+        // требует, чтобы ПРОВЕРЯЕМЫЙ лист был ТЕКУЩИМ активным листом чертежа (вкладкой) -
+        // иначе падает с "Autodesk.AutoCAD.Runtime.Exception: eLayoutNotCurrent". При
+        // печати НЕСКОЛЬКИХ листов подряд (наш случай - MAGICPRINT перебирает их все)
+        // перед КАЖДЫМ вызовом Validate нужно переключать LayoutManager.Current.CurrentLayout
+        // на этот конкретный лист - подтверждено официальным примером Autodesk "Driving a
+        // multi-sheet AutoCAD plot" (keanw.com), не только моя догадка.
         private static PlotInfo BuildPlotInfo(SheetPlan sheet)
         {
+            LayoutManager.Current.CurrentLayout = sheet.LayoutName;
+
             using (Transaction tr = sheet.LayoutId.Database.TransactionManager.StartTransaction())
             {
                 Layout layout = (Layout)tr.GetObject(sheet.LayoutId, OpenMode.ForRead);
