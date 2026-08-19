@@ -266,8 +266,18 @@ namespace PoseEdit2026
                 // прямоугольник рамки, которую нашли (WindowMin/WindowMax) - так на
                 // печать не попадёт ничего за пределами рамки листа (штампы соседних
                 // листов, служебные пометки и т.п.).
-                psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
+                //
+                // ВАЖНО (баг найден и исправлен 2026-08-19, второй крэш подряд после
+                // фикса FindMatchingMedia): порядок вызовов ОБЯЗАТЕЛЕН именно такой -
+                // SetPlotWindowArea ДО SetPlotType(Window), а не после. У меня было
+                // наоборот - SetPlotType(ps, Window) падал с
+                // "Autodesk.AutoCAD.Runtime.Exception: eInvalidInput", потому что на
+                // момент вызова окно печати ещё не задано (у ps, скопированного из
+                // layout.CopyFrom выше, окно печати - "пустое"/вырожденное, раз лист
+                // раньше печатался не через PlotType.Window) - подтверждено на форумах
+                // Autodesk, не только моя догадка.
                 psv.SetPlotWindowArea(ps, new Extents2d(sheet.WindowMin, sheet.WindowMax));
+                psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
 
                 // Масштаб 1:1 - рамка листа печатается в натуральную величину бумаги
                 // (пользователь выбрал этот вариант явно, а не "вписать в лист").
