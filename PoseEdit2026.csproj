@@ -117,7 +117,9 @@
     <None Remove="Resources\Shape_91.png" />
     <None Remove="Resources\Shape_92.png" />
     <None Remove="Resources\Shape_93.png" />
-    <!-- Файлы Shape_94.png - Shape_99.png удалены, так как в папке Resources теперь только 94 картинки (00-93) -->
+    <None Remove="Resources\Shape_94.png" />
+    <None Remove="Resources\Shape_95.png" />
+    <!-- Файлы Shape_96.png - Shape_99.png не существуют - в папке Resources 96 картинок (00-95) -->
   </ItemGroup>
 
   <ItemGroup>
@@ -235,7 +237,9 @@
     <Resource Include="Resources\Shape_91.png" />
     <Resource Include="Resources\Shape_92.png" />
     <Resource Include="Resources\Shape_93.png" />
-    <!-- Файлы Shape_94.png - Shape_99.png удалены, так как в папке Resources теперь только 94 картинки (00-93) -->
+    <Resource Include="Resources\Shape_94.png" />
+    <Resource Include="Resources\Shape_95.png" />
+    <!-- Файлы Shape_96.png - Shape_99.png не существуют - в папке Resources 96 картинок (00-95) -->
   </ItemGroup>
 
 </Project>
