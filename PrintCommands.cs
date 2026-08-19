@@ -145,6 +145,15 @@ namespace PoseEdit2026
                         MediaName = mediaName,
                         Rotate = rotate,
                     });
+
+                    // ВРЕМЕННАЯ диагностика (2026-08-19) - ищем причину, почему на A3/A2/A1/A0
+                    // печатается только штамп, а рамка/содержимое обрезаны, хотя размер листа
+                    // подобран верно. Печатаем реальные координаты найденной рамки и rotate,
+                    // чтобы сравнить с тем, что реально нарисовано в чертеже (убрать после
+                    // диагностики).
+                    ed.WriteMessage($"\nMAGICPRINT DIAG: {name}: window ({frame.Value.MinPoint.X:F1}," +
+                                     $"{frame.Value.MinPoint.Y:F1}) - ({frame.Value.MaxPoint.X:F1}," +
+                                     $"{frame.Value.MaxPoint.Y:F1}), media='{mediaName}', rotate={rotate}");
                 }
 
                 tr.Commit();
