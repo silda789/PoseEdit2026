@@ -524,7 +524,10 @@ namespace PoseEdit2026
                 string tb2 = attrs.TryGetValue("TB", out string tbv2) ? tbv2 : "";
                 string aralik2 = PozHelper.GetAralik(tb2);
                 string boluIsareti = aralik2.Length > 0 ? "/" : "";
-                int fiIndex = tb2.IndexOf(PozHelper.Fi, StringComparison.OrdinalIgnoreCase);
+                // FindDiameterSymbol - не голый tb2.IndexOf(PozHelper.Fi, ...) (искал бы
+                // только "Ø" и пропустил бы старые TB с "%%C") - см. подробный комментарий
+                // в PozHelper.cs про баг с диаметром, найденный 2026-08-19.
+                int fiIndex = PozHelper.FindDiameterSymbol(tb2).Index;
                 string prefix = fiIndex >= 0 ? tb2.Substring(0, fiIndex) : tb2;
                 string newTb = prefix + PozHelper.Fi + bilgiCap + boluIsareti + aralik2;
 

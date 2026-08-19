@@ -24,19 +24,48 @@ namespace PoseEdit2026
 {
     public static class PozHelper
     {
-        // "%%C" - управляющий код AutoCAD для символа диаметра (Ø). В LISP это (fi_) -> fi
-        public const string Fi = "%%C";
+        // "Ø" - символ диаметра (Unicode), именно его пишет в TB текущий WPF-редактор EEN
+        // (см. PoseEditWindow.xaml.cs: "Ø" + txtDiameter.Text) - используем его же при
+        // СОЗДАНИИ новых/переписанных строк TB в этом файле и в LegacyCommands.cs
+        // (через PozHelper.Fi). "%%C" - старый управляющий код AutoCAD для того же символа
+        // (LISP-эпоха, до перехода на WPF) - остаётся как fallback при ЧТЕНИИ старых TB,
+        // которые ещё не были открыты/пересохранены через новый редактор.
+        public const string Fi = "Ø";
 
         // ====================================================================================
         // РАЗБОР СТРОКИ TB (сырые подстроки, БЕЗ вычисления выражений - аналог poz_edit_* из POSEDIT.LSP)
         // ====================================================================================
 
-        // poz_edit_adet_carpi: множитель БЕЗ символа "x" (например "3" в "3x20%%C10" - вызывающий
+        // Ищет символ диаметра в TB - сначала "Ø" (текущий формат), потом "%%C"/"%%c"
+        // (старый формат) - тот же порядок проверки, что уже был в PoseEditWindow.xaml.cs
+        // (ParseTB) и QuantityTableGenerator.cs (ParseAdetFromTB/ParseCapFromTB).
+        //
+        // ВАЖНО (баг найден и исправлен 2026-08-19): раньше GetAdetCarpi/GetAdet/GetCap
+        // искали ТОЛЬКО "%%C" (через старую константу Fi="%%C") - для ЛЮБОЙ позиции,
+        // отредактированной через EEN (то есть практически для всех позиций в реальной
+        // работе - TB там всегда с "Ø", не "%%C"), эти функции молча возвращали "" вместо
+        // диаметра. Из-за этого POZVERN считал позиции с РАЗНЫМ диаметром одинаковыми
+        // (Cap="" у всех, раз diameter не находился) и присваивал им один и тот же POZ -
+        // пользователь поймал это на реальном чертеже (Ø32 и Ø36 получили один POZ).
+        public static (int Index, int Length) FindDiameterSymbol(string tb)
+        {
+            if (string.IsNullOrEmpty(tb)) return (-1, 0);
+
+            int idx = tb.IndexOf("Ø", StringComparison.Ordinal);
+            if (idx >= 0) return (idx, 1);
+
+            idx = tb.IndexOf("%%C", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0) return (idx, 3);
+
+            return (-1, 0);
+        }
+
+        // poz_edit_adet_carpi: множитель БЕЗ символа "x" (например "3" в "3x20Ø10" - вызывающий
         // код сам дописывает "x" при сборке строки, как и в оригинале)
         public static string GetAdetCarpi(string tb)
         {
             if (string.IsNullOrEmpty(tb)) return "";
-            int fiIndex = tb.IndexOf(Fi, StringComparison.OrdinalIgnoreCase);
+            int fiIndex = FindDiameterSymbol(tb).Index;
             if (fiIndex < 0) return "";
             string adetKismi = tb.Substring(0, fiIndex);
             int lastX = adetKismi.ToUpperInvariant().LastIndexOf('X');
@@ -45,11 +74,11 @@ namespace PoseEdit2026
             return "";
         }
 
-        // poz_edit_adet: количество стержней (без множителя), например "20" в "3x20%%C10"
+        // poz_edit_adet: количество стержней (без множителя), например "20" в "3x20Ø10"
         public static string GetAdet(string tb)
         {
             if (string.IsNullOrEmpty(tb)) return "";
-            int fiIndex = tb.IndexOf(Fi, StringComparison.OrdinalIgnoreCase);
+            int fiIndex = FindDiameterSymbol(tb).Index;
             if (fiIndex < 0) return "";
             string adetKismi = tb.Substring(0, fiIndex);
             if (adetKismi.Length == 0) return "";
@@ -58,13 +87,14 @@ namespace PoseEdit2026
             return adetKismi.Substring(lastX + 1);
         }
 
-        // poz_edit_cap: диаметр между "%%C" и "/" (или до конца строки), например "10" в "20%%C10/100"
+        // poz_edit_cap: диаметр между символом диаметра и "/" (или до конца строки),
+        // например "10" в "20Ø10/100"
         public static string GetCap(string tb)
         {
             if (string.IsNullOrEmpty(tb)) return "";
-            int fiIndex = tb.IndexOf(Fi, StringComparison.OrdinalIgnoreCase);
+            var (fiIndex, fiLength) = FindDiameterSymbol(tb);
             if (fiIndex < 0) return "";
-            int start = fiIndex + Fi.Length;
+            int start = fiIndex + fiLength;
             int slashIndex = tb.IndexOf('/', start);
             if (slashIndex < 0) slashIndex = tb.Length;
             if (slashIndex < start) return "";
