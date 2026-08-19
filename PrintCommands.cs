@@ -115,21 +115,48 @@ namespace PoseEdit2026
                 {
                     BlockTableRecord layoutBtr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
 
-                    Extents3d? frame = FindLargestClosedPolylineExtents(tr, layoutBtr);
-                    if (frame == null)
+                    // Список ВСЕХ замкнутых полилиний на листе (не только самая большая) -
+                    // отсортирован по убыванию площади. На листе может быть несколько
+                    // замкнутых контуров (сама рамка, ячейки штампа и т.п.) - раньше метод
+                    // слепо брал САМУЮ БОЛЬШУЮ по площади и считал её рамкой, даже если её
+                    // размер не совпадал ни с одним реальным форматом бумаги.
+                    List<Extents3d> candidates = FindClosedPolylineCandidates(tr, layoutBtr);
+                    if (candidates.Count == 0)
                     {
                         skipped.Add($"{name}: zamknutaya polyliniya (ramka lista) ne naidena.");
                         continue;
                     }
 
-                    double widthMm = frame.Value.MaxPoint.X - frame.Value.MinPoint.X;
-                    double heightMm = frame.Value.MaxPoint.Y - frame.Value.MinPoint.Y;
-
-                    string mediaName = FindMatchingMedia(layout, widthMm, heightMm, out bool rotate);
-                    if (mediaName == null)
+                    // ВАЖНО (изменено 2026-08-19 по просьбе пользователя): теперь ищем среди
+                    // ВСЕХ замкнутых полилиний именно ту, чей размер СОВПАДАЕТ с реальным
+                    // форматом бумаги (ISO или вручную добавленный custom) - а не просто берём
+                    // самую большую и потом проверяем её размер. Перебираем от большей к
+                    // меньшей (см. сортировку в FindClosedPolylineCandidates), первое
+                    // совпадение и есть искомая рамка листа.
+                    Extents3d? frame = null;
+                    string mediaName = null;
+                    bool rotate = false;
+                    foreach (Extents3d candidate in candidates)
                     {
-                        double shortSide = Math.Min(widthMm, heightMm);
-                        double longSide = Math.Max(widthMm, heightMm);
+                        double candWidthMm = candidate.MaxPoint.X - candidate.MinPoint.X;
+                        double candHeightMm = candidate.MaxPoint.Y - candidate.MinPoint.Y;
+                        string candMedia = FindMatchingMedia(layout, candWidthMm, candHeightMm, out bool candRotate);
+                        if (candMedia == null) continue;
+
+                        frame = candidate;
+                        mediaName = candMedia;
+                        rotate = candRotate;
+                        break;
+                    }
+
+                    if (frame == null)
+                    {
+                        // В сообщении о пропуске показываем размер САМОЙ БОЛЬШОЙ замкнутой
+                        // полилинии - скорее всего это и есть рамка, просто её размер не
+                        // совпал ни с одним известным форматом (или это опечатка при черчении).
+                        Extents3d biggest = candidates[0];
+                        double shortSide = Math.Min(biggest.MaxPoint.X - biggest.MinPoint.X, biggest.MaxPoint.Y - biggest.MinPoint.Y);
+                        double longSide = Math.Max(biggest.MaxPoint.X - biggest.MinPoint.X, biggest.MaxPoint.Y - biggest.MinPoint.Y);
                         skipped.Add($"{name}: razmer {shortSide:F0}x{longSide:F0} mm ne naiden sredi " +
                                     $"standartnyh ili vruchnuyu dobavlennyh razmerov PC3 (ozhidalos imya " +
                                     $"'CUSTOM {shortSide:F0}x{longSide:F0}mm').");
@@ -399,12 +426,16 @@ namespace PoseEdit2026
         }
 
         // ====================================================================================
-        // Поиск рамки листа: самая большая (по площади) ЗАМКНУТАЯ полилиния на листе.
+        // Поиск ВСЕХ замкнутых полилиний на листе (не только самой большой) - отсортированы
+        // по убыванию площади. Раньше здесь искалась только САМАЯ БОЛЬШАЯ полилиния, и её
+        // размер считался рамкой листа безусловно; теперь вызывающий код (Step 1 выше)
+        // перебирает весь список и берёт первую, чей размер реально совпал с известным
+        // форматом бумаги - на листе может быть несколько замкнутых контуров (сама рамка,
+        // ячейки штампа и т.п.), и самый большой по площади не всегда и есть настоящая рамка.
         // ====================================================================================
-        private static Extents3d? FindLargestClosedPolylineExtents(Transaction tr, BlockTableRecord layoutBtr)
+        private static List<Extents3d> FindClosedPolylineCandidates(Transaction tr, BlockTableRecord layoutBtr)
         {
-            Extents3d? best = null;
-            double bestArea = -1;
+            var candidates = new List<(Extents3d Ext, double Area)>();
 
             foreach (ObjectId id in layoutBtr)
             {
@@ -417,13 +448,10 @@ namespace PoseEdit2026
 
                 Extents3d ext = pl.GeometricExtents;
                 double area = (ext.MaxPoint.X - ext.MinPoint.X) * (ext.MaxPoint.Y - ext.MinPoint.Y);
-                if (area <= bestArea) continue;
-
-                bestArea = area;
-                best = ext;
+                candidates.Add((ext, area));
             }
 
-            return best;
+            return candidates.OrderByDescending(c => c.Area).Select(c => c.Ext).ToList();
         }
 
         // ====================================================================================
