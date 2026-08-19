@@ -310,6 +310,24 @@ namespace PoseEdit2026
                 psv.SetPlotConfigurationName(ps, PlotterName, sheet.MediaName);
                 psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
 
+                // Поворот листа - ставим СРАЗУ после плоттера/бумаги, ДО окна печати.
+                //
+                // ВАЖНО (баг найден и исправлен 2026-08-19, ПОСЛЕ третьего крэша, уже на
+                // этапе визуальной проверки а не крэша): на всех листах, где rotate=true
+                // (A3/A2/A1/A0 - альбомная рамка на портретную бумагу), в PDF печаталась
+                // только часть штампа, а не вся рамка/содержимое - только у A4
+                // (единственный без поворота) печать выходила полностью верной. Раньше
+                // SetPlotRotation вызывался ПОСЛЕДНИМ, уже после SetPlotWindowArea/
+                // SetPlotOrigin/SetPlotCentered - похоже, окно и origin, заданные ДО того,
+                // как повернуть бумагу, интерпретировались в старой (неповёрнутой) системе
+                // координат бумаги и переставали совпадать с реальной after-поворота
+                // печатной областью. Перенесено в начало - как и оба предыдущих бага в
+                // этом файле, дело оказалось в порядке вызовов этого API, не в логике.
+                double width = sheet.WindowMax.X - sheet.WindowMin.X;
+                double height = sheet.WindowMax.Y - sheet.WindowMin.Y;
+                psv.SetPlotRotation(ps, sheet.Rotate ? (width > height ? PlotRotation.Degrees090 : PlotRotation.Degrees000)
+                                                       : PlotRotation.Degrees000);
+
                 // PlotType.Window - печатаем не "всё, что есть на листе", а именно
                 // прямоугольник рамки, которую нашли (WindowMin/WindowMax) - так на
                 // печать не попадёт ничего за пределами рамки листа (штампы соседних
@@ -338,15 +356,6 @@ namespace PoseEdit2026
                 // действительно без полей, см. комментарий в начале файла).
                 psv.SetPlotCentered(ps, false);
                 psv.SetPlotOrigin(ps, new Point2d(0, 0));
-
-                // Если рамка "лежит" горизонтально (шире, чем выше), а стандартный размер
-                // бумаги в PC3 определён как "портретный" (короткая сторона по X) -
-                // поворачиваем бумагу на 90°, чтобы содержимое поместилось правильной
-                // стороной, а не обрезалось.
-                double width = sheet.WindowMax.X - sheet.WindowMin.X;
-                double height = sheet.WindowMax.Y - sheet.WindowMin.Y;
-                psv.SetPlotRotation(ps, sheet.Rotate ? (width > height ? PlotRotation.Degrees090 : PlotRotation.Degrees000)
-                                                       : PlotRotation.Degrees000);
 
                 pi.OverrideSettings = ps;
 
@@ -465,12 +474,29 @@ namespace PoseEdit2026
         private static string Normalize(string s) =>
             s.Replace(" ", "").Replace("_", "").ToUpperInvariant();
 
-        private static string FindMediaNameContaining(System.Collections.Specialized.StringCollection names, params string[] mustContainAll)
+        // Разбивает имя бумаги на отдельные "слова" по любому разделителю (пробел,
+        // подчёркивание, скобки, точка) - используется вместо простого IndexOf/Contains
+        // для поиска размера по ЦЕЛОМУ слову, а не по случайному вхождению подстроки.
+        private static string[] Tokenize(string s) =>
+            System.Text.RegularExpressions.Regex.Split(s.ToUpperInvariant(), @"[^A-Z0-9]+")
+                .Where(t => t.Length > 0).ToArray();
+
+        // ВАЖНО (баг найден и исправлен 2026-08-19, найден через диагностику после
+        // визуальной проверки PDF, не крэш): лист "A0" (841x1189мм) подобрал бумагу
+        // "ISO_full_bleed_2A0_(1189.00_x_1682.00_MM)" - это 2A0 (ВДВОЕ больше A0!), а не
+        // A0. Причина - старая реализация искала размер через Normalize(name).Contains(...),
+        // то есть просто "содержит подстроку без пробелов/подчёркиваний" - а "2A0"
+        // ТОЖЕ содержит подстроку "A0" в конце. Из-за этого окно печати 841x1189 попадало
+        // на бумагу 1189x1682 - совсем другого размера, отсюда и пустой лист. Теперь ищем
+        // размер как ОТДЕЛЬНЫЙ токен ("2A0" и "A0" - разные, не совпадающие токены), а не
+        // как подстроку где угодно внутри имени.
+        private static string FindMediaNameContaining(System.Collections.Specialized.StringCollection names, params string[] mustContainAllTokens)
         {
+            string[] required = mustContainAllTokens.SelectMany(Tokenize).ToArray();
             foreach (string name in names)
             {
-                string normalized = Normalize(name);
-                if (mustContainAll.All(part => normalized.Contains(Normalize(part))))
+                string[] tokens = Tokenize(name);
+                if (required.All(r => tokens.Contains(r)))
                     return name;
             }
             return null;
