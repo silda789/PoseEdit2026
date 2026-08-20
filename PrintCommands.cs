@@ -554,21 +554,32 @@ namespace PoseEdit2026
         private static string EnsureCustomMediaSize(Layout layout, double widthMm, double heightMm)
         {
             string canonicalName = $"UserDefinedMetric ({widthMm:F2} x {heightMm:F2}MM)";
+            Editor diagEd = Application.DocumentManager.MdiActiveDocument.Editor;
 
             try
             {
                 string pc3Path = HostApplicationServices.Current.FindFile(PlotterName, layout.Database, FindFileHint.Default);
                 if (string.IsNullOrEmpty(pc3Path) || !File.Exists(pc3Path))
+                {
+                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: FindFile ne nashel .pc3 ('{pc3Path}').");
                     return null;
+                }
 
                 string pc3Text = File.ReadAllText(pc3Path);
                 System.Text.RegularExpressions.Match pmpMatch = System.Text.RegularExpressions.Regex.Match(
                     pc3Text, "\"user_defined_model_pathname\"\\s*:\\s*\"([^\"]*)\"");
-                if (!pmpMatch.Success) return null;
+                if (!pmpMatch.Success)
+                {
+                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: user_defined_model_pathname ne naiden v pc3 '{pc3Path}'.");
+                    return null;
+                }
 
                 string pmpPath = pmpMatch.Groups[1].Value.Replace("\\\\", "\\");
                 if (string.IsNullOrEmpty(pmpPath) || !File.Exists(pmpPath))
+                {
+                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: pmp fail ne naiden ('{pmpPath}').");
                     return null;
+                }
 
                 string text = File.ReadAllText(pmpPath);
 
@@ -578,14 +589,22 @@ namespace PoseEdit2026
                     return canonicalName;
 
                 int udmIdx = text.IndexOf("\"udm\"", StringComparison.Ordinal);
-                if (udmIdx < 0) return null;
+                if (udmIdx < 0)
+                {
+                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: 'udm' ne naiden v pmp '{pmpPath}'.");
+                    return null;
+                }
 
                 string afterUdm = text.Substring(udmIdx);
                 System.Text.RegularExpressions.Match descMatch = System.Text.RegularExpressions.Regex.Match(
                     afterUdm, "\"description\"\\s*:\\s*\\{");
                 System.Text.RegularExpressions.Match sizeMatch = System.Text.RegularExpressions.Regex.Match(
                     afterUdm, "\"size\"\\s*:\\s*\\{");
-                if (!descMatch.Success || !sizeMatch.Success) return null;
+                if (!descMatch.Success || !sizeMatch.Success)
+                {
+                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: description/size ne naideny v udm-sektsii '{pmpPath}'.");
+                    return null;
+                }
 
                 int descInsertPos = udmIdx + descMatch.Index + descMatch.Length;
                 int sizeInsertPos = udmIdx + sizeMatch.Index + sizeMatch.Length;
@@ -634,11 +653,12 @@ namespace PoseEdit2026
                 File.WriteAllText(pmpPath, finalText);
                 return canonicalName;
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
                 // Любая проблема с чтением/правкой системного файла плоттера - не валим
                 // всю команду, просто не добавляем размер (лист будет пропущен, как
                 // и раньше, до этой автоматизации).
+                diagEd.WriteMessage($"\nMAGICPRINT DIAG3: isklyuchenie - {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
