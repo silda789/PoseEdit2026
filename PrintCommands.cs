@@ -558,10 +558,18 @@ namespace PoseEdit2026
 
             try
             {
-                string pc3Path = HostApplicationServices.Current.FindFile(PlotterName, layout.Database, FindFileHint.Default);
-                if (string.IsNullOrEmpty(pc3Path) || !File.Exists(pc3Path))
+                // ВАЖНО (исправлено 2026-08-20, после реального теста): HostApplicationServices.
+                // FindFile с FindFileHint.Default НЕ годится для поиска .pc3 - на реальном
+                // тесте бросал "Autodesk.AutoCAD.Runtime.Exception: eFilerError" вместо того
+                // чтобы просто не найти файл. .pc3-файлы лежат не там, где ищет Default (это
+                // хинт для файлов чертежа - шрифты, xref и т.п.), а в отдельной папке
+                // плоттеров, путь к которой даёт HostApplicationServices.RoamableRootFolder
+                // (например "...\AutoCAD 2024\R24.3\enu") + "\Plotters" - подтверждено на
+                // реальных .pc3-файлах этой же машины при исследовании их формата.
+                string pc3Path = Path.Combine(HostApplicationServices.Current.RoamableRootFolder, "Plotters", PlotterName);
+                if (!File.Exists(pc3Path))
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: FindFile ne nashel .pc3 ('{pc3Path}').");
+                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: .pc3 ne naiden po puti '{pc3Path}'.");
                     return null;
                 }
 
