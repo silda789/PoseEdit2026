@@ -123,7 +123,7 @@ namespace PoseEdit2026
                     List<Extents3d> candidates = FindClosedPolylineCandidates(tr, layoutBtr);
                     if (candidates.Count == 0)
                     {
-                        skipped.Add($"{name}: zamknutaya polyliniya (ramka lista) ne naidena.");
+                        skipped.Add($"{name}: no closed polyline (sheet frame) found.");
                         continue;
                     }
 
@@ -157,8 +157,8 @@ namespace PoseEdit2026
                         Extents3d biggest = candidates[0];
                         double shortSide = Math.Min(biggest.MaxPoint.X - biggest.MinPoint.X, biggest.MaxPoint.Y - biggest.MinPoint.Y);
                         double longSide = Math.Max(biggest.MaxPoint.X - biggest.MinPoint.X, biggest.MaxPoint.Y - biggest.MinPoint.Y);
-                        skipped.Add($"{name}: razmer {shortSide:F0}x{longSide:F0} mm ne naiden sredi " +
-                                    $"standartnyh ili vruchnuyu dobavlennyh razmerov PC3 (ozhidalos imya " +
+                        skipped.Add($"{name}: size {shortSide:F0}x{longSide:F0} mm not found among " +
+                                    $"standard or manually added PC3 sizes (expected name " +
                                     $"'CUSTOM {shortSide:F0}x{longSide:F0}mm').");
                         continue;
                     }
@@ -179,14 +179,14 @@ namespace PoseEdit2026
 
             if (skipped.Count > 0)
             {
-                ed.WriteMessage($"\nMAGICPRINT: propuscheno listov {skipped.Count}:");
+                ed.WriteMessage($"\nMAGICPRINT: skipped {skipped.Count} sheet(s):");
                 foreach (string s in skipped)
                     ed.WriteMessage("\n  - " + s);
             }
 
             if (sheets.Count == 0)
             {
-                ed.WriteMessage("\nMAGICPRINT: net listov, podhodyaschih dlya pechati. Otmena.");
+                ed.WriteMessage("\nMAGICPRINT: no sheets suitable for printing. Cancelled.");
                 return;
             }
 
@@ -320,7 +320,7 @@ namespace PoseEdit2026
                     }
                 }
 
-                ed.WriteMessage($"\nMAGICPRINT: otpravleno na pechat {sheets.Count} listov v '{outputPdf}'.");
+                ed.WriteMessage($"\nMAGICPRINT: sent {sheets.Count} sheet(s) to print, saved as '{outputPdf}'.");
             }
             finally
             {
@@ -615,7 +615,7 @@ namespace PoseEdit2026
                 string pc3Path = Path.Combine(HostApplicationServices.Current.RoamableRootFolder, "Plotters", PlotterName);
                 if (!File.Exists(pc3Path))
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - .pc3 ne naiden po puti '{pc3Path}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: could not register size - .pc3 not found at '{pc3Path}'.");
                     return null;
                 }
 
@@ -624,14 +624,14 @@ namespace PoseEdit2026
                     pc3Text, "\"user_defined_model_pathname\"\\s*:\\s*\"([^\"]*)\"");
                 if (!pmpMatch.Success)
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - user_defined_model_pathname ne naiden v pc3 '{pc3Path}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: could not register size - user_defined_model_pathname not found in pc3 '{pc3Path}'.");
                     return null;
                 }
 
                 string pmpPath = pmpMatch.Groups[1].Value.Replace("\\\\", "\\");
                 if (string.IsNullOrEmpty(pmpPath) || !File.Exists(pmpPath))
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - pmp fail ne naiden ('{pmpPath}').");
+                    diagEd.WriteMessage($"\nMAGICPRINT: could not register size - pmp file not found ('{pmpPath}').");
                     return null;
                 }
 
@@ -645,7 +645,7 @@ namespace PoseEdit2026
                 int udmIdx = text.IndexOf("\"udm\"", StringComparison.Ordinal);
                 if (udmIdx < 0)
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - 'udm' ne naiden v pmp '{pmpPath}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: could not register size - 'udm' not found in pmp '{pmpPath}'.");
                     return null;
                 }
 
@@ -656,7 +656,7 @@ namespace PoseEdit2026
                     afterUdm, "\"size\"\\s*:\\s*\\{");
                 if (!descMatch.Success || !sizeMatch.Success)
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - description/size ne naideny v udm-sektsii '{pmpPath}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: could not register size - description/size not found in udm section '{pmpPath}'.");
                     return null;
                 }
 
@@ -712,7 +712,7 @@ namespace PoseEdit2026
                 // Любая проблема с чтением/правкой системного файла плоттера - не валим
                 // всю команду, просто не добавляем размер (лист будет пропущен, как
                 // и раньше, до этой автоматизации).
-                diagEd.WriteMessage($"\nMAGICPRINT: oshibka pri registratsii razmera - {ex.GetType().Name}: {ex.Message}");
+                diagEd.WriteMessage($"\nMAGICPRINT: error registering size - {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
