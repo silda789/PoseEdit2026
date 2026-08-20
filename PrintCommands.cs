@@ -274,12 +274,28 @@ namespace PoseEdit2026
                         // это и превращает несколько отдельных страниц в ОДИН общий
                         // многостраничный PDF-файл, а не в отдельные файлы по одному на
                         // лист. PlotInfo первого листа передаётся сюда как "образец".
+                        //
+                        // ВАЖНО (баг найден и исправлен 2026-08-20, ЧЕТВЁРТЫЙ крэш подряд,
+                        // сразу после переноса построения всех PlotInfo заранее): оказалось,
+                        // "текущим" листом должен быть КОНКРЕТНЫЙ печатаемый лист не только
+                        // на момент PlotInfoValidator.Validate() (это уже было исправлено
+                        // раньше), но и на момент КАЖДОГО pe.BeginPage - иначе снова
+                        // "eLayoutNotCurrent", теперь уже прямо в BeginPage. Раз все PlotInfo
+                        // строятся заранее одним циклом (см. выше), к началу печати текущим
+                        // остаётся ПОСЛЕДНИЙ обработанный лист - переключаем обратно на
+                        // нужный лист прямо перед каждым BeginDocument/BeginPage. Это ЛЁГКОЕ
+                        // переключение (без повторного BuildPlotInfo/Validate/транзакции) -
+                        // судя по предыдущему багу (3-й лист и далее ломались), полноценная
+                        // пересборка PlotInfo прямо в процессе активной печати - вот что
+                        // портит состояние движка, а не само переключение текущего листа.
+                        LayoutManager.Current.CurrentLayout = sheets[0].LayoutName;
                         pe.BeginDocument(plotInfos[0], doc.Name, null, 1, true, outputPdf);
 
                         int printed = 0;
                         for (int i = 0; i < sheets.Count; i++)
                         {
                             PlotInfo pi = plotInfos[i];
+                            LayoutManager.Current.CurrentLayout = sheets[i].LayoutName;
 
                             ppd.OnBeginSheet();
                             ppd.LowerSheetProgressRange = 0;
