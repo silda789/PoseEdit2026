@@ -171,6 +171,10 @@ namespace PoseEdit2026
                         WindowMax = new Point2d(frame.Value.MaxPoint.X, frame.Value.MaxPoint.Y),
                         MediaName = mediaName,
                         Rotate = rotate,
+                        // ВРЕМЕННО (2026-08-19): чередуем 090/270 через один повёрнутый лист,
+                        // чтобы за ОДИН прогон увидеть, влияет ли направление поворота на то,
+                        // какой угол обрезается - убрать вместе с остальной диагностикой.
+                        RotateAlt = rotate && (sheets.Count(s => s.Rotate) % 2 == 1),
                     });
 
                     // ВРЕМЕННАЯ диагностика (2026-08-19) - ищем причину, почему на A3/A2/A1/A0
@@ -352,8 +356,10 @@ namespace PoseEdit2026
                 // этом файле, дело оказалось в порядке вызовов этого API, не в логике.
                 double width = sheet.WindowMax.X - sheet.WindowMin.X;
                 double height = sheet.WindowMax.Y - sheet.WindowMin.Y;
-                psv.SetPlotRotation(ps, sheet.Rotate ? (width > height ? PlotRotation.Degrees090 : PlotRotation.Degrees000)
-                                                       : PlotRotation.Degrees000);
+                PlotRotation rotation = PlotRotation.Degrees000;
+                if (sheet.Rotate && width > height)
+                    rotation = sheet.RotateAlt ? PlotRotation.Degrees270 : PlotRotation.Degrees090;
+                psv.SetPlotRotation(ps, rotation);
 
                 // PlotType.Window - печатаем не "всё, что есть на листе", а именно
                 // прямоугольник рамки, которую нашли (WindowMin/WindowMax) - так на
@@ -568,6 +574,7 @@ namespace PoseEdit2026
             public Point2d WindowMax;
             public string MediaName;
             public bool Rotate;
+            public bool RotateAlt; // ВРЕМЕННО (2026-08-19) - см. комментарий у места установки
         }
     }
 }
