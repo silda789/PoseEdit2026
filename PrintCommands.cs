@@ -489,9 +489,9 @@ namespace PoseEdit2026
                 }
             }
 
-            // Точного стандартного совпадения нет - пробуем найти вручную добавленный
-            // custom-размер по договорённому имени "CUSTOM <short>x<long>mm" (см. большой
-            // комментарий в начале файла про то, как его создать в мастере AutoCAD).
+            // Точного стандартного совпадения нет - сначала проверяем, нет ли уже
+            // вручную добавленного (через мастер AutoCAD, старым способом) размера по
+            // договорённому имени "CUSTOM <short>x<long>mm".
             string customName = $"CUSTOM {shortSide:F0}x{longSide:F0}mm";
             string customFound = FindMediaNameExact(mediaNames, customName);
             if (customFound != null)
@@ -500,7 +500,147 @@ namespace PoseEdit2026
                 return customFound;
             }
 
+            // Совсем ничего подходящего нет - регистрируем размер САМИ, прямо в .pmp-файл
+            // плоттера (см. EnsureCustomMediaSize) - у реальных чертежей десятки
+            // уникальных нестандартных длин (балки/ригели разной длины), вручную
+            // добавлять каждую через мастер было бы неприемлемо медленно (2026-08-20,
+            // жалоба пользователя - "18 листов пропущено" на реальном чертеже). Размер
+            // создаётся в ЕГО СОБСТВЕННОЙ (уже правильной) ориентации рамки - поворот
+            // бумаги не нужен, раз сама бумага того же размера, что и рамка, без
+            // привязки к портретному/альбомному канону ISO.
+            string autoName = EnsureCustomMediaSize(layout, widthMm, heightMm);
+            if (autoName != null)
+            {
+                rotate = false;
+                return autoName;
+            }
+
             return null;
+        }
+
+        // ====================================================================================
+        // Автоматическая регистрация нестандартного размера бумаги ПРЯМО в .pmp-файл
+        // плоттера (без мастера AutoCAD "Диспетчер плоттеров").
+        // ====================================================================================
+        // ВАЖНО (найдено и подтверждено 2026-08-20): современные .pc3/.pmp файлы AutoCAD
+        // (проверено на реальных файлах 2024/2026) оказались обычным ЧИТАЕМЫМ JSON
+        // (заголовок "PIAFILEVERSION_3.0,json"), а не бинарным форматом - старый
+        // комментарий в начале файла про "нет .NET/COM API для программного добавления
+        // custom paper size" по-прежнему верен ЧЕРЕЗ ОФИЦИАЛЬНЫЙ API, но сам файл
+        // можно читать/писать напрямую как обычный текст, в обход этого ограничения.
+        // Пользовательские размеры бумаги хранятся в СВЯЗАННОМ .pmp-файле (путь - прямо
+        // в .pc3, поле meta.user_defined_model_pathname), в разделе "udm" (User Defined
+        // Model), в двух синхронных списках:
+        //  - data.udm.media.description - сами размеры (ширина/высота/область печати),
+        //  - data.udm.media.size - их "человеческие" и канонические имена, ссылающиеся
+        //    на запись выше по полю "media_description_name". Именно поле "name" из
+        //    ЭТОГО списка - тот самый канонический "UserDefinedMetric (WxH MM)", который
+        //    видит GetCanonicalMediaNameList и принимает SetPlotConfigurationName.
+        // Формат обеих записей подобран ТОЧНО по образцу существующих записей, которые
+        // сам AutoCAD создал ранее (когда пользователь добавлял размеры вручную через
+        // мастер в рамках этой же сессии отладки) - не придуман с нуля.
+        //
+        // Правим файл ТОЧЕЧНОЙ ВСТАВКОЙ новых записей (не полным перепарсингом JSON),
+        // чтобы гарантированно не задеть/не переформатировать остальные сотни уже
+        // существующих записей - это системный файл плоттера, общий для всего AutoCAD,
+        // а не только для этого плагина, поэтому перед первой правкой всегда делаем
+        // резервную копию (<файл>.magicprint_backup, только если её ещё нет - чтобы не
+        // затереть чистый оригинал повторными запусками).
+        //
+        // Возвращает канонический "name" размера, который можно сразу передавать в
+        // SetPlotConfigurationName - или null, если что-то пошло не так (файл плоттера
+        // не найден, неожиданная структура и т.п.) - тогда лист просто пропускается, как
+        // раньше, а не падает с необработанным исключением.
+        private static string EnsureCustomMediaSize(Layout layout, double widthMm, double heightMm)
+        {
+            string canonicalName = $"UserDefinedMetric ({widthMm:F2} x {heightMm:F2}MM)";
+
+            try
+            {
+                string pc3Path = HostApplicationServices.Current.FindFile(PlotterName, layout.Database, FindFileHint.Default);
+                if (string.IsNullOrEmpty(pc3Path) || !File.Exists(pc3Path))
+                    return null;
+
+                string pc3Text = File.ReadAllText(pc3Path);
+                System.Text.RegularExpressions.Match pmpMatch = System.Text.RegularExpressions.Regex.Match(
+                    pc3Text, "\"user_defined_model_pathname\"\\s*:\\s*\"([^\"]*)\"");
+                if (!pmpMatch.Success) return null;
+
+                string pmpPath = pmpMatch.Groups[1].Value.Replace("\\\\", "\\");
+                if (string.IsNullOrEmpty(pmpPath) || !File.Exists(pmpPath))
+                    return null;
+
+                string text = File.ReadAllText(pmpPath);
+
+                // Уже добавляли этот же размер раньше (в этом или прошлом запуске) -
+                // ничего делать не нужно, просто используем существующую запись.
+                if (text.Contains($"\"name\" : \"{canonicalName}\""))
+                    return canonicalName;
+
+                int udmIdx = text.IndexOf("\"udm\"", StringComparison.Ordinal);
+                if (udmIdx < 0) return null;
+
+                string afterUdm = text.Substring(udmIdx);
+                System.Text.RegularExpressions.Match descMatch = System.Text.RegularExpressions.Regex.Match(
+                    afterUdm, "\"description\"\\s*:\\s*\\{");
+                System.Text.RegularExpressions.Match sizeMatch = System.Text.RegularExpressions.Regex.Match(
+                    afterUdm, "\"size\"\\s*:\\s*\\{");
+                if (!descMatch.Success || !sizeMatch.Success) return null;
+
+                int descInsertPos = udmIdx + descMatch.Index + descMatch.Length;
+                int sizeInsertPos = udmIdx + sizeMatch.Index + sizeMatch.Length;
+
+                bool landscape = widthMm > heightMm;
+                double area = widthMm * heightMm;
+                string orientation = landscape ? "Landscape" : "Portrait";
+                string entryKey = $"MP_{widthMm:F0}x{heightMm:F0}";
+                string descName = $"UserDefinedMetric {orientation} {widthMm:F2}W x {heightMm:F2}H - " +
+                                   $"(0, 0) x ({widthMm:F0}, {heightMm:F0}) ={area:F0} MM";
+
+                string descEntry =
+                    $"\n     \"{entryKey}\" : \n     {{\n" +
+                    "      \"caps_type\" : 2,\n" +
+                    "      \"dimensional\" : true,\n" +
+                    $"      \"media_bounds_urx\" : {widthMm:F1},\n" +
+                    $"      \"media_bounds_ury\" : {heightMm:F1},\n" +
+                    $"      \"name\" : \"{descName}\",\n" +
+                    $"      \"printable_area\" : {area:F1},\n" +
+                    "      \"printable_bounds_llx\" : 0.0,\n" +
+                    "      \"printable_bounds_lly\" : 0.0,\n" +
+                    $"      \"printable_bounds_urx\" : {widthMm:F1},\n" +
+                    $"      \"printable_bounds_ury\" : {heightMm:F1}\n" +
+                    "     },";
+
+                string sizeEntry =
+                    $"\n     \"{entryKey}\" : \n     {{\n" +
+                    "      \"caps_type\" : 2,\n" +
+                    $"      \"landscape_mode\" : {(landscape ? "true" : "false")},\n" +
+                    $"      \"localized_name\" : \"MAGICPRINT ({widthMm:F2} x {heightMm:F2} MM)\",\n" +
+                    $"      \"media_description_name\" : \"{descName}\",\n" +
+                    "      \"media_group\" : 15,\n" +
+                    $"      \"name\" : \"{canonicalName}\"\n" +
+                    "     },";
+
+                // Вставляем СНАЧАЛА в более позднюю по тексту позицию (size), потом в
+                // более раннюю (description) - иначе первая же вставка сдвинула бы уже
+                // вычисленный индекс для второй.
+                string afterSize = text.Substring(0, sizeInsertPos) + sizeEntry + text.Substring(sizeInsertPos);
+                string finalText = afterSize.Substring(0, descInsertPos) + descEntry + afterSize.Substring(descInsertPos);
+
+                string backupPath = pmpPath + ".magicprint_backup";
+                if (!File.Exists(backupPath))
+                    File.Copy(pmpPath, backupPath);
+
+                File.WriteAllText(pmpPath, finalText);
+                return canonicalName;
+            }
+            catch (System.Exception)
+            {
+                // Любая проблема с чтением/правкой системного файла плоттера - не валим
+                // всю команду, просто не добавляем размер (лист будет пропущен, как
+                // и раньше, до этой автоматизации).
+                return null;
+            }
         }
 
         // Сравнение "без учёта пробелов/подчёркиваний/регистра" - разные версии/локализации
