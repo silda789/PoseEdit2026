@@ -244,6 +244,17 @@ namespace PoseEdit2026
                 foreach (SheetPlan sheet in sheets)
                     BuildPlotInfo(sheet);
 
+                // Сохраняем чертёж тем же именем и в то же место сразу после того, как
+                // BuildPlotInfo выше записал новые настройки печати в каждый Layout
+                // ("Apply to Layout" - CopyFrom) - это помечает чертёж как изменённый
+                // (dirty), и без явного сохранения здесь при закрытии AutoCAD потом
+                // выскакивал бы обычный диалог "Save Changes?" (пожаловался пользователь
+                // 2026-08-20). db.OriginalFileVersion - та же версия формата DWG, в
+                // которой файл был открыт, так что SaveAs сюда не меняет формат файла,
+                // просто перезаписывает его же тем же путём/именем - равносильно
+                // обычному Ctrl+S, но без диалога подтверждения.
+                db.SaveAs(dwgPath, db.OriginalFileVersion);
+
                 using (DsdEntryCollection dsdEntries = new DsdEntryCollection())
                 {
                     foreach (SheetPlan sheet in sheets)
