@@ -235,6 +235,22 @@ namespace PoseEdit2026
             using (doc.LockDocument())
             try
             {
+                // ВАЖНО (изменено 2026-08-20, после теста на 10 листах, где сломались
+                // конкретно 3-й и дальше листы НЕЗАВИСИМО от поворота/размера - A0 и A1
+                // напечатались верно, A2/A3/A4 после них уже нет): все PlotInfo для ВСЕХ
+                // листов теперь строятся и валидируются здесь, ДО pe.BeginPlot/BeginDocument
+                // - раньше BuildPlotInfo (со своим переключением LayoutManager.Current.
+                // CurrentLayout и регеном листа) вызывался ПРЯМО ВНУТРИ цикла печати, то
+                // есть между BeginPage/EndPage уже АКТИВНОГО пакетного PlotEngine - похоже,
+                // переключение текущего листа (и вызванный им регент) во время уже идущей
+                // пакетной печати сбивает внутренний графический кэш движка для второго и
+                // далее переключения, а не для первого-второго. Теперь ни один регент/
+                // переключение листа не происходит после BeginPlot - все PlotInfo уже готовы
+                // заранее, цикл печати просто использует готовый список.
+                var plotInfos = new List<PlotInfo>();
+                foreach (SheetPlan sheet in sheets)
+                    plotInfos.Add(BuildPlotInfo(sheet));
+
                 PlotEngine pe = PlotFactory.CreatePublishEngine();
                 using (pe)
                 {
@@ -257,15 +273,13 @@ namespace PoseEdit2026
                         // BeginDocument вызывается ОДИН РАЗ на весь пакет листов - именно
                         // это и превращает несколько отдельных страниц в ОДИН общий
                         // многостраничный PDF-файл, а не в отдельные файлы по одному на
-                        // лист. PlotInfo первого листа передаётся сюда как "образец" -
-                        // реальные настройки каждой страницы задаются в BeginPage ниже.
-                        PlotInfo firstInfo = BuildPlotInfo(sheets[0]);
-                        pe.BeginDocument(firstInfo, doc.Name, null, 1, true, outputPdf);
+                        // лист. PlotInfo первого листа передаётся сюда как "образец".
+                        pe.BeginDocument(plotInfos[0], doc.Name, null, 1, true, outputPdf);
 
                         int printed = 0;
                         for (int i = 0; i < sheets.Count; i++)
                         {
-                            PlotInfo pi = i == 0 ? firstInfo : BuildPlotInfo(sheets[i]);
+                            PlotInfo pi = plotInfos[i];
 
                             ppd.OnBeginSheet();
                             ppd.LowerSheetProgressRange = 0;
