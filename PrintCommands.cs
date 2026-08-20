@@ -569,7 +569,7 @@ namespace PoseEdit2026
                 string pc3Path = Path.Combine(HostApplicationServices.Current.RoamableRootFolder, "Plotters", PlotterName);
                 if (!File.Exists(pc3Path))
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: .pc3 ne naiden po puti '{pc3Path}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - .pc3 ne naiden po puti '{pc3Path}'.");
                     return null;
                 }
 
@@ -578,14 +578,14 @@ namespace PoseEdit2026
                     pc3Text, "\"user_defined_model_pathname\"\\s*:\\s*\"([^\"]*)\"");
                 if (!pmpMatch.Success)
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: user_defined_model_pathname ne naiden v pc3 '{pc3Path}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - user_defined_model_pathname ne naiden v pc3 '{pc3Path}'.");
                     return null;
                 }
 
                 string pmpPath = pmpMatch.Groups[1].Value.Replace("\\\\", "\\");
                 if (string.IsNullOrEmpty(pmpPath) || !File.Exists(pmpPath))
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: pmp fail ne naiden ('{pmpPath}').");
+                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - pmp fail ne naiden ('{pmpPath}').");
                     return null;
                 }
 
@@ -599,7 +599,7 @@ namespace PoseEdit2026
                 int udmIdx = text.IndexOf("\"udm\"", StringComparison.Ordinal);
                 if (udmIdx < 0)
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: 'udm' ne naiden v pmp '{pmpPath}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - 'udm' ne naiden v pmp '{pmpPath}'.");
                     return null;
                 }
 
@@ -610,7 +610,7 @@ namespace PoseEdit2026
                     afterUdm, "\"size\"\\s*:\\s*\\{");
                 if (!descMatch.Success || !sizeMatch.Success)
                 {
-                    diagEd.WriteMessage($"\nMAGICPRINT DIAG3: description/size ne naideny v udm-sektsii '{pmpPath}'.");
+                    diagEd.WriteMessage($"\nMAGICPRINT: ne udalos zaregistrirovat razmer - description/size ne naideny v udm-sektsii '{pmpPath}'.");
                     return null;
                 }
 
@@ -666,7 +666,7 @@ namespace PoseEdit2026
                 // Любая проблема с чтением/правкой системного файла плоттера - не валим
                 // всю команду, просто не добавляем размер (лист будет пропущен, как
                 // и раньше, до этой автоматизации).
-                diagEd.WriteMessage($"\nMAGICPRINT DIAG3: isklyuchenie - {ex.GetType().Name}: {ex.Message}");
+                diagEd.WriteMessage($"\nMAGICPRINT: oshibka pri registratsii razmera - {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
