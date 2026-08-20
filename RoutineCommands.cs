@@ -22,6 +22,14 @@ namespace PoseEdit2026
         // Например "55" -> префикс "", номер 55, суффикс "". "Лист 55" -> префикс "Лист ", номер 55.
         private static readonly Regex NumberedLayoutPattern = new Regex(@"^(\D*)(\d+)(\D*)$");
 
+        // Отдельный, более мягкий шаблон только для LAYRENUM (см. комментарий у самой команды
+        // ниже) - берёт ПЕРВОЕ число в имени как "старый номер" (сам LAYRENUM его не
+        // использует, только для извлечения префикса/суффикса) и отдельно распознаёт
+        // характерный хвост " (2)"/" (3)" от AutoCAD-дедупликации при копировании листов -
+        // такой хвост отбрасывается как мусор, а не считается "вторым числом", которое ломает
+        // общий `NumberedLayoutPattern`.
+        private static readonly Regex LayrenumNamePattern = new Regex(@"^(\D*)(\d+)(\D*?)(?:\s\(\d+\))?$");
+
         // ====================================================================================
         // КОМАНДА: LAYSHIFT — сдвинуть номера всех листов (Layout) на константу
         // ====================================================================================
@@ -169,6 +177,23 @@ namespace PoseEdit2026
         // нет гарантии порядка, как в LAYSHIFT. Поэтому переименование идёт в ДВА ПРОХОДА:
         // сначала все листы получают временные уникальные имена (гарантированно ни с чем не
         // совпадающие), потом только со второго прохода - настоящие итоговые номера.
+        //
+        // ВАЖНО (баг найден и исправлен 2026-08-20, реальный тест: 10 Layouts - 5 форматов
+        // A4-A0, вставленных в чертёж ДВАЖДЫ - LAYRENUM переименовал только 5 из 10, без
+        // единого сообщения о пропуске): общий с LAYSHIFT `NumberedLayoutPattern` требует,
+        // чтобы во ВСЁМ имени листа было РОВНО ОДНО число. Когда лист копируют и в чертеже
+        // уже есть лист с таким именем, сам AutoCAD переименовывает копию, добавляя в конец
+        // " (2)", " (3)" и т.д. (например "Layout1" -> "Layout1 (2)") - у такого имени уже
+        // ДВА числа, оно не проходит `^(\D*)(\d+)(\D*)$` целиком, и весь лист молча
+        // выбрасывается ещё на этапе сбора (`if (!m.Success) continue;`) - не как "skipped"
+        // (это относится только к ошибкам самого переименования), а просто исчезает из
+        // списка без всякого следа. LAYRENUM (в отличие от LAYSHIFT) СТАРОЕ число вообще не
+        // использует - только Prefix/Suffix для итогового имени - так что ему не нужно
+        // requiring ровно одно число: достаточно найти ПЕРВОЕ число в имени и (отдельно)
+        // распознать характерный суффикс " (N)" от AutoCAD-дедупликации, чтобы отбросить
+        // именно его как "мусор", не как содержательный суффикс. LAYSHIFT here НЕ трогаем -
+        // ему старое число обязательно нужно для сдвига, и слепое отбрасывание "(2)" там
+        // могло бы дать два разных листа с одинаковым новым именем (коллизия).
         [CommandMethod("LAYRENUM")]
         public static void RenumberLayoutsSequentiallyCommand()
         {
@@ -192,6 +217,7 @@ namespace PoseEdit2026
             using (doc.LockDocument())
             {
                 var items = new List<(string OldName, string Prefix, string Suffix, int TabOrder)>();
+                var unmatchedNames = new List<string>();
 
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
@@ -201,12 +227,23 @@ namespace PoseEdit2026
                         Layout layout = tr.GetObject(entry.Value, OpenMode.ForRead) as Layout;
                         if (layout == null || layout.ModelType) continue; // пропускаем "Model"
 
-                        Match m = NumberedLayoutPattern.Match(entry.Key);
-                        if (!m.Success) continue; // в имени нет числа - пропускаем
+                        Match m = LayrenumNamePattern.Match(entry.Key);
+                        if (!m.Success)
+                        {
+                            unmatchedNames.Add(entry.Key); // в имени нет числа (или необычный формат) - пропускаем, но не молча
+                            continue;
+                        }
 
                         items.Add((entry.Key, m.Groups[1].Value, m.Groups[3].Value, layout.TabOrder));
                     }
                     tr.Commit();
+                }
+
+                if (unmatchedNames.Count > 0)
+                {
+                    ed.WriteMessage($"\n{unmatchedNames.Count} layout(s) skipped - no recognizable number in the name:");
+                    foreach (string name in unmatchedNames)
+                        ed.WriteMessage($"\n  - {name}");
                 }
 
                 if (items.Count == 0)
