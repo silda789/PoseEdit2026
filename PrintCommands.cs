@@ -304,8 +304,9 @@ namespace PoseEdit2026
                 }
 
                 // Возвращаем пользователя на тот лист, что был активен до запуска команды -
-                // BuildPlotInfo переключал текущий лист по очереди при подготовке каждого
-                // листа к печати.
+                // сама печать через Publish переключает активный лист по очереди на
+                // каждый лист набора (это уже неизбежная часть самой печати, см. комментарий
+                // в BuildPlotInfo ниже про то, что раньше делали то же самое ещё и заранее).
                 try { LayoutManager.Current.CurrentLayout = originalActiveLayout; }
                 catch (System.Exception) { /* лист удалён/недоступен - остаёмся где есть */ }
 
@@ -315,26 +316,32 @@ namespace PoseEdit2026
             }
         }
 
-        // Собирает и валидирует PlotInfo для одного листа - вынесено в отдельный метод,
-        // потому что вызывается по одному разу на каждый лист внутри цикла печати выше.
+        // Собирает настройки печати для одного листа и записывает их в Layout - вынесено
+        // в отдельный метод, потому что вызывается по одному разу на каждый лист внутри
+        // цикла печати выше.
         //
-        // ВАЖНО (баг найден и исправлен 2026-08-19, третий крэш подряд после фиксов
-        // FindMatchingMedia и SetPlotType/SetPlotWindowArea): PlotInfoValidator.Validate
-        // требует, чтобы ПРОВЕРЯЕМЫЙ лист был ТЕКУЩИМ активным листом чертежа (вкладкой) -
-        // иначе падает с "Autodesk.AutoCAD.Runtime.Exception: eLayoutNotCurrent". При
-        // печати НЕСКОЛЬКИХ листов подряд (наш случай - MAGICPRINT перебирает их все)
-        // перед КАЖДЫМ вызовом Validate нужно переключать LayoutManager.Current.CurrentLayout
-        // на этот конкретный лист - подтверждено официальным примером Autodesk "Driving a
-        // multi-sheet AutoCAD plot" (keanw.com), не только моя догадка.
-        private static PlotInfo BuildPlotInfo(SheetPlan sheet)
+        // ВАЖНО (ускорение найдено и исправлено 2026-08-20, по жалобе пользователя на
+        // медленную печать - "время деньги"): раньше этот метод ещё и переключал
+        // LayoutManager.Current.CurrentLayout на каждый лист по очереди - это было нужно
+        // ТОЛЬКО для PlotInfoValidator.Validate() (иначе падает с "eLayoutNotCurrent",
+        // см. старую историю бага). Переключение активного листа заставляет AutoCAD
+        // полностью его регенерировать (видно в консоли как "Regenerating model - caching
+        // viewports") - а Publish (см. Step 3 выше) при самой печати переключает и
+        // регенерирует КАЖДЫЙ лист ЕЩЁ РАЗ, уже по-настоящему. То есть каждый лист
+        // регенерировался дважды подряд, и второй (наш собственный, "проверочный") проход
+        // не давал НИЧЕГО, что осталось бы в напечатанном PDF - PlotInfo (pi/piv) в этом
+        // файле с переезда на DSD/Publish (см. Step 3) вообще больше нигде не
+        // используется для самой печати, он только валидировался и тут же выбрасывался.
+        // Теперь PlotInfoValidator и переключение текущего листа убраны целиком - остались
+        // только вызовы PlotSettingsValidator (psv.Set*) ниже, которые проверяют каждую
+        // настройку по отдельности (плоттер, бумага, поворот, окно и т.д.) и НЕ требуют,
+        // чтобы лист был текущим/активным - это ограничение было именно у Validate().
+        // Publish при самой печати выполняет свою собственную (единственную) валидацию.
+        private static void BuildPlotInfo(SheetPlan sheet)
         {
-            LayoutManager.Current.CurrentLayout = sheet.LayoutName;
-
             using (Transaction tr = sheet.LayoutId.Database.TransactionManager.StartTransaction())
             {
                 Layout layout = (Layout)tr.GetObject(sheet.LayoutId, OpenMode.ForRead);
-
-                PlotInfo pi = new PlotInfo { Layout = sheet.LayoutId };
 
                 PlotSettings ps = new PlotSettings(layout.ModelType);
                 ps.CopyFrom(layout);
@@ -401,24 +408,19 @@ namespace PoseEdit2026
                 // завязки на origin(0,0), который, похоже, и ломается при повороте.
                 psv.SetPlotCentered(ps, true);
 
-                pi.OverrideSettings = ps;
-
-                PlotInfoValidator piv = new PlotInfoValidator { MediaMatchingPolicy = MatchingPolicy.MatchEnabled };
-                piv.Validate(pi);
-
                 // "Apply to Layout" - то же самое, что кнопка "Apply to Layout" в обычном
                 // диалоге печати AutoCAD (Файл -> Печать -> Window -> "Apply to Layout"):
-                // сохраняем итоговые (уже провалидированные psv/piv) настройки печати прямо
-                // в сам объект Layout чертежа, а не только используем их "на лету" для
-                // текущей печати. Без этого шага следующая РУЧНАЯ печать этого листа
-                // (Ctrl+P) в диалоге показывала бы старые/пустые настройки Window, а не
-                // тот прямоугольник рамки, который MAGICPRINT только что нашёл и напечатал -
-                // Layout нужно открыть на запись (UpgradeOpen), он был открыт ForRead выше.
+                // сохраняем итоговые (уже провалидированные psv-вызовами выше) настройки
+                // печати прямо в сам объект Layout чертежа, а не только используем их
+                // "на лету" для текущей печати. Без этого шага следующая РУЧНАЯ печать
+                // этого листа (Ctrl+P) в диалоге показывала бы старые/пустые настройки
+                // Window, а не тот прямоугольник рамки, который MAGICPRINT только что
+                // нашёл и напечатал - Layout нужно открыть на запись (UpgradeOpen), он
+                // был открыт ForRead выше.
                 layout.UpgradeOpen();
                 layout.CopyFrom(ps);
 
                 tr.Commit();
-                return pi;
             }
         }
 
