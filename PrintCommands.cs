@@ -171,20 +171,7 @@ namespace PoseEdit2026
                         WindowMax = new Point2d(frame.Value.MaxPoint.X, frame.Value.MaxPoint.Y),
                         MediaName = mediaName,
                         Rotate = rotate,
-                        // ВРЕМЕННО (2026-08-19): чередуем 090/270 через один повёрнутый лист,
-                        // чтобы за ОДИН прогон увидеть, влияет ли направление поворота на то,
-                        // какой угол обрезается - убрать вместе с остальной диагностикой.
-                        RotateAlt = rotate && (sheets.Count(s => s.Rotate) % 2 == 1),
                     });
-
-                    // ВРЕМЕННАЯ диагностика (2026-08-19) - ищем причину, почему на A3/A2/A1/A0
-                    // печатается только штамп, а рамка/содержимое обрезаны, хотя размер листа
-                    // подобран верно. Печатаем реальные координаты найденной рамки и rotate,
-                    // чтобы сравнить с тем, что реально нарисовано в чертеже (убрать после
-                    // диагностики).
-                    ed.WriteMessage($"\nMAGICPRINT DIAG: {name}: window ({frame.Value.MinPoint.X:F1}," +
-                                     $"{frame.Value.MinPoint.Y:F1}) - ({frame.Value.MaxPoint.X:F1}," +
-                                     $"{frame.Value.MaxPoint.Y:F1}), media='{mediaName}', rotate={rotate}");
                 }
 
                 tr.Commit();
@@ -212,124 +199,102 @@ namespace PoseEdit2026
                 Path.GetFileNameWithoutExtension(dwgPath) + ".pdf");
 
             // ================================================================================
-            // ШАГ 3: печать. doc.LockDocument() - обязательная блокировка документа перед
-            // тем, как менять/использовать его через код (тот же приём, что и во всех
-            // остальных командах этого проекта, которые правят чертёж программно).
+            // ШАГ 3: печать.
             //
-            // BuildPlotInfo переключает текущий лист (LayoutManager.Current.CurrentLayout)
-            // для каждого печатаемого листа по очереди - запоминаем, какой лист был активен
-            // ДО запуска команды, чтобы вернуть пользователя туда же после печати (тот же
-            // приём save/restore, что и в RoutineCommands.LAYSHIFT/LAYRENUM).
+            // ВАЖНО (архитектура изменена 2026-08-20 - собственный PlotEngine-цикл заменён
+            // на штатный AutoCAD Publish): своя ручная печать через PlotFactory.
+            // CreatePublishEngine + BeginPage-цикл (как в официальном примере Autodesk
+            // "Driving a multi-sheet AutoCAD plot") оказалась РЕАЛЬНО БАГОВАННОЙ у самого
+            // AutoCAD PDF-драйвера при печати НЕСКОЛЬКИХ РАЗНЫХ размеров/поворотов подряд в
+            // одном пакете: подтверждено множеством тестов на реальном чертеже (10 листов,
+            // 2026-08-19/20) - первые 1-2 листа после любого "скачка вверх" по размеру
+            // печатались верно, а следующие 2-3 листа поменьше - с обрезанным содержимым
+            // (только угол штампа), независимо от поворота/ориентации. Ни смена порядка
+            // вызовов SetPlotRotation/SetPlotWindowArea/SetPlotOrigin, ни центрирование
+            // вместо ручного origin, ни подготовка всех PlotInfo заранее до начала печати -
+            // ничего из этого не исправило сам баг (только исправляло сопутствующие крэши).
             //
-            // BACKGROUNDPLOT - принудительно ставим в 0 (= "печатать только на переднем
-            // плане, последовательно") на время печати. Если у пользователя эта переменная
-            // была не 0 (AutoCAD по умолчанию часто ставит 2 = "фоновая печать разрешена
-            // для Plot и Publish"), AutoCAD может пытаться параллельно фоново обработать
-            // наш пакетный PlotEngine - это прямо названо "критичным требованием" в
-            // официальном примере Autodesk по программному плоттингу, и раньше было упущено
-            // при портировании - могло быть одной из причин "зависания"/медленной печати.
+            // Вместо самодельного цикла используем ТОТ ЖЕ механизм, что и штатная команда
+            // AutoCAD "Файл -> Publish" (Publish/PUBLISH) - она как раз создана именно для
+            // печати наборов листов разных форматов в один PDF и годами проверена в бою,
+            // в отличие от нашего PlotEngine-цикла, у которого не было ни одного прецедента
+            // использования в этом проекте. Механизм - DSD (Drawing Set Description): текстовый
+            // файл-список "какой лист из какого чертежа печатать", который передаётся в
+            // Application.Publisher.PublishExecute. Официальный пример Autodesk ("Publish
+            // Layouts (.NET)", help.autodesk.com) показывает точно этот путь.
+            //
+            // Каждый DsdEntry.Nps (Named Page Setup) оставляем пустым - это означает
+            // "использовать те настройки печати, что уже сохранены прямо в самом Layout" -
+            // а мы их туда только что записали через BuildPlotInfo ниже (шаг "Apply to
+            // Layout", добавленный раньше в этом же файле) - то есть вся работа по подбору
+            // окна печати/бумаги/поворота (ШАГ 1 выше) никуда не пропадает, она просто
+            // применяется через сохранённые настройки Layout'а, а не через наш собственный
+            // PlotInfo.OverrideSettings.
             int originalBackgroundPlot = (short)Application.GetSystemVariable("BACKGROUNDPLOT");
             Application.SetSystemVariable("BACKGROUNDPLOT", 0);
             string originalActiveLayout = LayoutManager.Current.CurrentLayout;
+            string dsdPath = null;
 
-            using (doc.LockDocument())
             try
             {
-                // ВАЖНО (изменено 2026-08-20, после теста на 10 листах, где сломались
-                // конкретно 3-й и дальше листы НЕЗАВИСИМО от поворота/размера - A0 и A1
-                // напечатались верно, A2/A3/A4 после них уже нет): все PlotInfo для ВСЕХ
-                // листов теперь строятся и валидируются здесь, ДО pe.BeginPlot/BeginDocument
-                // - раньше BuildPlotInfo (со своим переключением LayoutManager.Current.
-                // CurrentLayout и регеном листа) вызывался ПРЯМО ВНУТРИ цикла печати, то
-                // есть между BeginPage/EndPage уже АКТИВНОГО пакетного PlotEngine - похоже,
-                // переключение текущего листа (и вызванный им регент) во время уже идущей
-                // пакетной печати сбивает внутренний графический кэш движка для второго и
-                // далее переключения, а не для первого-второго. Теперь ни один регент/
-                // переключение листа не происходит после BeginPlot - все PlotInfo уже готовы
-                // заранее, цикл печати просто использует готовый список.
-                var plotInfos = new List<PlotInfo>();
+                // Сохраняем итоговые настройки печати (Window/бумага/поворот) прямо в каждый
+                // Layout - возвращаемый PlotInfo больше не используется (печать теперь идёт
+                // через Publish, не через наш PlotEngine), но сама запись в Layout ("Apply to
+                // Layout") - это именно то, что потом читает DsdEntry.Nps="" ниже.
                 foreach (SheetPlan sheet in sheets)
-                    plotInfos.Add(BuildPlotInfo(sheet));
+                    BuildPlotInfo(sheet);
 
-                PlotEngine pe = PlotFactory.CreatePublishEngine();
-                using (pe)
+                using (DsdEntryCollection dsdEntries = new DsdEntryCollection())
                 {
-                    PlotProgressDialog ppd = new PlotProgressDialog(false, sheets.Count, true);
-                    using (ppd)
+                    foreach (SheetPlan sheet in sheets)
                     {
-                        ppd.set_PlotMsgString(PlotMessageIndex.DialogTitle, "MAGICPRINT");
-                        ppd.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
-                        ppd.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
-                        ppd.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Sheet Set Progress");
-                        ppd.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
-                        ppd.LowerPlotProgressRange = 0;
-                        ppd.UpperPlotProgressRange = 100;
-                        ppd.PlotProgressPos = 0;
-                        ppd.OnBeginPlot();
-                        ppd.IsVisible = true;
-
-                        pe.BeginPlot(ppd, null);
-
-                        // BeginDocument вызывается ОДИН РАЗ на весь пакет листов - именно
-                        // это и превращает несколько отдельных страниц в ОДИН общий
-                        // многостраничный PDF-файл, а не в отдельные файлы по одному на
-                        // лист. PlotInfo первого листа передаётся сюда как "образец".
-                        //
-                        // ВАЖНО (баг найден и исправлен 2026-08-20, ЧЕТВЁРТЫЙ крэш подряд,
-                        // сразу после переноса построения всех PlotInfo заранее): оказалось,
-                        // "текущим" листом должен быть КОНКРЕТНЫЙ печатаемый лист не только
-                        // на момент PlotInfoValidator.Validate() (это уже было исправлено
-                        // раньше), но и на момент КАЖДОГО pe.BeginPage - иначе снова
-                        // "eLayoutNotCurrent", теперь уже прямо в BeginPage. Раз все PlotInfo
-                        // строятся заранее одним циклом (см. выше), к началу печати текущим
-                        // остаётся ПОСЛЕДНИЙ обработанный лист - переключаем обратно на
-                        // нужный лист прямо перед каждым BeginDocument/BeginPage. Это ЛЁГКОЕ
-                        // переключение (без повторного BuildPlotInfo/Validate/транзакции) -
-                        // судя по предыдущему багу (3-й лист и далее ломались), полноценная
-                        // пересборка PlotInfo прямо в процессе активной печати - вот что
-                        // портит состояние движка, а не само переключение текущего листа.
-                        LayoutManager.Current.CurrentLayout = sheets[0].LayoutName;
-                        pe.BeginDocument(plotInfos[0], doc.Name, null, 1, true, outputPdf);
-
-                        int printed = 0;
-                        for (int i = 0; i < sheets.Count; i++)
+                        DsdEntry entry = new DsdEntry
                         {
-                            PlotInfo pi = plotInfos[i];
-                            LayoutManager.Current.CurrentLayout = sheets[i].LayoutName;
+                            DwgName = dwgPath,
+                            Layout = sheet.LayoutName,
+                            Title = sheet.LayoutName,
+                            Nps = "",           // "" = взять сохранённые настройки самого Layout'а
+                            NpsSourceDwg = "",
+                        };
+                        dsdEntries.Add(entry);
+                    }
 
-                            ppd.OnBeginSheet();
-                            ppd.LowerSheetProgressRange = 0;
-                            ppd.UpperSheetProgressRange = 100;
-                            ppd.SheetProgressPos = 0;
+                    using (DsdData dsdData = new DsdData())
+                    {
+                        dsdData.DestinationName = outputPdf;
+                        dsdData.ProjectPath = Path.GetDirectoryName(dwgPath) ?? "";
+                        dsdData.SheetType = SheetType.MultiPdf; // один общий многостраничный PDF
+                        dsdData.SetDsdEntryCollection(dsdEntries);
+                        dsdData.LogFilePath = Path.Combine(Path.GetTempPath(), "MAGICPRINT_publish_log.txt");
 
-                            // "true" третьим параметром = "это последняя страница?" -
-                            // важно передавать true ТОЛЬКО на самом последнем листе,
-                            // иначе PDF получится оборванным/только с одной страницей.
-                            bool isLast = i == sheets.Count - 1;
-                            PlotPageInfo ppi = new PlotPageInfo();
-                            pe.BeginPage(ppi, pi, isLast, null);
-                            pe.BeginGenerateGraphics(null);
-                            pe.EndGenerateGraphics(null);
-                            pe.EndPage(null);
+                        dsdPath = Path.Combine(Path.GetTempPath(), "MAGICPRINT_" + Guid.NewGuid().ToString("N") + ".dsd");
+                        dsdData.WriteDsd(dsdPath);
 
-                            ppd.SheetProgressPos = 100;
-                            ppd.OnEndSheet();
-                            printed++;
+                        // Официальный пример Autodesk перечитывает только что записанный DSD
+                        // обратно через отдельный DsdData/ReadDsd перед PublishExecute - тот
+                        // же приём повторён здесь, не своя придумка.
+                        using (DsdData dsdToPublish = new DsdData())
+                        {
+                            dsdToPublish.ReadDsd(dsdPath);
+                            PlotConfig plotConfig = PlotConfigManager.SetCurrentConfig(PlotterName);
+                            Application.Publisher.PublishExecute(dsdToPublish, plotConfig);
                         }
-
-                        pe.EndDocument(null);
-                        ppd.PlotProgressPos = 100;
-                        ppd.OnEndPlot();
-                        pe.EndPlot(null);
-
-                        ed.WriteMessage($"\nMAGICPRINT: napechatano listov {printed} v '{outputPdf}'.");
                     }
                 }
+
+                ed.WriteMessage($"\nMAGICPRINT: otpravleno na pechat {sheets.Count} listov v '{outputPdf}'.");
             }
             finally
             {
+                if (dsdPath != null)
+                {
+                    try { File.Delete(dsdPath); }
+                    catch (System.Exception) { /* временный файл, не критично если не удалился */ }
+                }
+
                 // Возвращаем пользователя на тот лист, что был активен до запуска команды -
-                // BuildPlotInfo переключал текущий лист много раз подряд во время печати.
+                // BuildPlotInfo переключал текущий лист по очереди при подготовке каждого
+                // листа к печати.
                 try { LayoutManager.Current.CurrentLayout = originalActiveLayout; }
                 catch (System.Exception) { /* лист удалён/недоступен - остаёмся где есть */ }
 
@@ -386,10 +351,7 @@ namespace PoseEdit2026
                 // этом файле, дело оказалось в порядке вызовов этого API, не в логике.
                 double width = sheet.WindowMax.X - sheet.WindowMin.X;
                 double height = sheet.WindowMax.Y - sheet.WindowMin.Y;
-                PlotRotation rotation = PlotRotation.Degrees000;
-                if (sheet.Rotate && width > height)
-                    rotation = sheet.RotateAlt ? PlotRotation.Degrees270 : PlotRotation.Degrees090;
-                psv.SetPlotRotation(ps, rotation);
+                psv.SetPlotRotation(ps, sheet.Rotate && width > height ? PlotRotation.Degrees090 : PlotRotation.Degrees000);
 
                 // PlotType.Window - печатаем не "всё, что есть на листе", а именно
                 // прямоугольник рамки, которую нашли (WindowMin/WindowMax) - так на
@@ -432,18 +394,6 @@ namespace PoseEdit2026
 
                 PlotInfoValidator piv = new PlotInfoValidator { MediaMatchingPolicy = MatchingPolicy.MatchEnabled };
                 piv.Validate(pi);
-
-                // ВРЕМЕННАЯ диагностика (2026-08-19) - проверяем, что Validate() НЕ подменил
-                // наши настройки поворота/окна печати на что-то другое (убрать после
-                // диагностики).
-                Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage(
-                    $"\nMAGICPRINT DIAG2: {sheet.LayoutName}: after Validate - " +
-                    $"PlotType={ps.PlotType}, PlotRotation={ps.PlotRotation}, " +
-                    $"PlotWindowArea=({ps.PlotWindowArea.MinPoint.X:F1},{ps.PlotWindowArea.MinPoint.Y:F1})-" +
-                    $"({ps.PlotWindowArea.MaxPoint.X:F1},{ps.PlotWindowArea.MaxPoint.Y:F1}), " +
-                    $"PlotOrigin=({ps.PlotOrigin.X:F1},{ps.PlotOrigin.Y:F1}), " +
-                    $"PlotCentered={ps.PlotCentered}, StdScale={ps.StdScaleType}, " +
-                    $"CanonicalMedia={ps.CanonicalMediaName}");
 
                 // "Apply to Layout" - то же самое, что кнопка "Apply to Layout" в обычном
                 // диалоге печати AutoCAD (Файл -> Печать -> Window -> "Apply to Layout"):
@@ -604,7 +554,6 @@ namespace PoseEdit2026
             public Point2d WindowMax;
             public string MediaName;
             public bool Rotate;
-            public bool RotateAlt; // ВРЕМЕННО (2026-08-19) - см. комментарий у места установки
         }
     }
 }
