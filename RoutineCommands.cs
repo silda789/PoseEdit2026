@@ -709,5 +709,82 @@ namespace PoseEdit2026
             ed.WriteMessage($"\nWith bulge (arc segments): {withBulge}  - recognized: {recognizedWithBulge} ({(withBulge > 0 ? 100.0 * recognizedWithBulge / withBulge : 0):F0}%)");
             ed.WriteMessage($"\nWithout bulge (all straight): {withoutBulge}  - recognized: {recognizedWithoutBulge} ({(withoutBulge > 0 ? 100.0 * recognizedWithoutBulge / withoutBulge : 0):F0}%)");
         }
+
+        // ====================================================================================
+        // КОМАНДА: ZOOMHANDLE — приблизить вид и подсветить объект по его Handle
+        // ====================================================================================
+        // ВРЕМЕННАЯ диагностическая команда (2026-08-21), продолжение мозгового штурма по
+        // Determination - PLDETCHECK печатает Handle каждого проблемного объекта (например
+        // "3A3AD"), но без этой команды пользователю пришлось бы искать полилинию по
+        // координатам вручную. Тут - вводишь Handle как есть (без "0x", просто hex-строка),
+        // команда находит объект, приближает вид к нему и выделяет (implied selection),
+        // чтобы сразу было видно, какая это форма.
+        [CommandMethod("ZOOMHANDLE")]
+        public static void ZoomToHandleCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            PromptStringOptions opts = new PromptStringOptions("\nHandle (naprimer 3A3AD): ") { AllowSpaces = false };
+            PromptResult res = ed.GetString(opts);
+            if (res.Status != PromptStatus.OK) return;
+
+            string handleText = res.StringResult.Trim();
+            long handleValue;
+            try
+            {
+                // Convert.ToInt64(text, 16) - переводит шестнадцатеричную строку (как в
+                // AutoCAD-Handle'ах) в обычное число, без нужды возиться с NumberStyles.
+                handleValue = Convert.ToInt64(handleText, 16);
+            }
+            catch (System.Exception)
+            {
+                ed.WriteMessage($"\nInvalid handle format: '{handleText}'.");
+                return;
+            }
+
+            ObjectId id;
+            try
+            {
+                id = db.GetObjectId(false, new Handle(handleValue), 0);
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nHandle '{handleText}' not found in this drawing: {ex.Message}");
+                return;
+            }
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null)
+                {
+                    ed.WriteMessage($"\nHandle '{handleText}' is not a drawable entity.");
+                    tr.Commit();
+                    return;
+                }
+
+                Extents3d ext = ent.GeometricExtents;
+
+                // Небольшой отступ вокруг объекта (10% от размера), чтобы он не упирался
+                // ровно в края экрана - иначе на маленьких формах совсем не видно контекста.
+                double dx = (ext.MaxPoint.X - ext.MinPoint.X) * 0.1 + 1.0;
+                double dy = (ext.MaxPoint.Y - ext.MinPoint.Y) * 0.1 + 1.0;
+                Extents3d padded = new Extents3d(
+                    new Point3d(ext.MinPoint.X - dx, ext.MinPoint.Y - dy, 0),
+                    new Point3d(ext.MaxPoint.X + dx, ext.MaxPoint.Y + dy, 0));
+
+                // Editor.Zoom(Extents3d) в этой версии API отсутствует - зумим тем же
+                // способом, что и обычный пользователь: команда ZOOM с опцией "Window".
+                ed.Command("_.ZOOM", "_W", padded.MinPoint, padded.MaxPoint);
+                ed.SetImpliedSelection(new ObjectId[] { id });
+
+                tr.Commit();
+            }
+
+            ed.WriteMessage($"\nZoomed to and selected handle '{handleText}'.");
+        }
     }
 }
