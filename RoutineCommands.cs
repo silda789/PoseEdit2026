@@ -14,6 +14,7 @@ using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 
 namespace PoseEdit2026
 {
@@ -614,6 +615,86 @@ namespace PoseEdit2026
                 sourceDb.Dispose();
                 try { File.Delete(tempFile); } catch (System.Exception) { /* временный файл, не критично */ }
             }
+        }
+
+        // ====================================================================================
+        // КОМАНДА: PLDETCHECK — диагностика: прогнать Recognize() по ВСЕМ полилиниям в
+        // текущем чертеже, проверив у каждой наличие дуговых сегментов (bulge)
+        // ====================================================================================
+        // ВРЕМЕННАЯ диагностическая команда (2026-08-21), продолжение мозгового штурма по
+        // Determination. Пользователь склеил (JOIN) все отдельные примитивы из PZ-эскизов
+        // в цельные полилинии в одном тестовом чертеже - но там, где раньше был скругленный
+        // угол (фаска/радиус), JOIN превращает его не в острую вершину, а в ДУГОВОЙ сегмент
+        // (bulge) между двумя новыми точками. RebarRecognizer.GetPointsFromEntity берёт
+        // только координаты вершин (poly.GetPoint3dAt) и НИКАК не учитывает bulge - то есть
+        // для таких скруглённых углов количество точек и все углы/длины между ними будут
+        // посчитаны неверно. Эта команда проверяет гипотезу на реальных данных: для каждой
+        // полилинии в текущем пространстве (Model Space) печатает - есть ли в ней хоть один
+        // ненулевой bulge, сколько вершин, и что вернул Recognize() (Type или 99).
+        //
+        // НЕ ТРОГАЕТ чертёж - только читает (ForRead), ничего не меняет и не сохраняет.
+        [CommandMethod("PLDETCHECK")]
+        public static void CheckAllPolylinesRecognitionCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+
+            int total = 0;
+            int withBulge = 0;
+            int withoutBulge = 0;
+            int recognizedWithBulge = 0;
+            int recognizedWithoutBulge = 0;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord ms = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+
+                foreach (ObjectId id in ms)
+                {
+                    Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (!(ent is Polyline poly)) continue; // считаем только LWPOLYLINE - это то, чем реально рисуют в EEN
+
+                    total++;
+
+                    bool hasBulge = false;
+                    for (int i = 0; i < poly.NumberOfVertices; i++)
+                    {
+                        // GetBulgeAt(i) - "изгиб" сегмента, начинающегося в вершине i.
+                        // 0 = прямой отрезок, любое другое значение = дуговой сегмент.
+                        if (Math.Abs(poly.GetBulgeAt(i)) > 0.0001)
+                        {
+                            hasBulge = true;
+                            break;
+                        }
+                    }
+
+                    RebarResult result = RebarRecognizer.Recognize(id);
+                    bool recognized = result.Type != "99";
+
+                    if (hasBulge)
+                    {
+                        withBulge++;
+                        if (recognized) recognizedWithBulge++;
+                    }
+                    else
+                    {
+                        withoutBulge++;
+                        if (recognized) recognizedWithoutBulge++;
+                    }
+
+                    Point3d firstPt = poly.NumberOfVertices > 0 ? poly.GetPoint3dAt(0) : Point3d.Origin;
+                    ed.WriteMessage($"\nHandle={ent.Handle}  at=({firstPt.X:F0},{firstPt.Y:F0})  verts={poly.NumberOfVertices}  bulge={(hasBulge ? "YES" : "no")}  -> {(recognized ? $"Type={result.Type}" : "NOT RECOGNIZED (99)")}");
+                }
+
+                tr.Commit();
+            }
+
+            ed.WriteMessage("\n\n=== PLDETCHECK summary ===");
+            ed.WriteMessage($"\nTotal polylines checked: {total}");
+            ed.WriteMessage($"\nWith bulge (arc segments): {withBulge}  - recognized: {recognizedWithBulge} ({(withBulge > 0 ? 100.0 * recognizedWithBulge / withBulge : 0):F0}%)");
+            ed.WriteMessage($"\nWithout bulge (all straight): {withoutBulge}  - recognized: {recognizedWithoutBulge} ({(withoutBulge > 0 ? 100.0 * recognizedWithoutBulge / withoutBulge : 0):F0}%)");
         }
     }
 }
