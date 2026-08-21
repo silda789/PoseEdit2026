@@ -7,6 +7,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.Runtime;
@@ -387,6 +388,142 @@ namespace PoseEdit2026
 
                 ed.WriteMessage($"\nVPLOCKALL: total viewports {totalViewports}, already locked {alreadyLocked}, locked now {newlyLocked}.");
             }
+        }
+
+        // ====================================================================================
+        // КОМАНДА: PZSHAPECHECK — диагностика: что реально лежит в PZ_00..PZ_95.dwg, и
+        // распознаёт ли их RebarRecognizer (мозговой штурм по улучшению Determination)
+        // ====================================================================================
+        // ВРЕМЕННАЯ диагностическая команда (2026-08-21), см. память сессии
+        // "project_determination_recognition" - RebarRecognizer.cs (кнопка "Determination"
+        // в EEN) распознаёт только ~10-20% реальных эскизов, которые чертит пользователь.
+        // Прежде чем чинить/переделывать сам алгоритм, нужны факты: какие из ~95 known
+        // "эталонных форм" (шаблоны PZ_00..PZ_95.dwg, уже встроены в проект - используются
+        // PZREDEFN) вообще распознаются, и что именно распознаётся неверно.
+        //
+        // ВАЖНО: команда НЕ трогает текущий открытый чертёж вообще - каждый PZ_XX.dwg
+        // открывается как ОТДЕЛЬНАЯ, не подключенная к документу Database (тот же приём
+        // чтения, что и в PZREDEFN перед db.Insert - см. LegacyCommands.cs), поэтому её
+        // можно гонять сколько угодно раз без всякого риска для активного чертежа и без
+        // необходимости что-либо сохранять перед запуском.
+        //
+        // ЧТО ДЕЛАЕТ, для каждого PZ_00..PZ_95 (96 файлов):
+        //   1. Извлекает embedded DWG-ресурс во временный файл.
+        //   2. Открывает его как отдельную Database, читает Model Space.
+        //   3. Ищет там объекты, которые умеет читать RebarRecognizer.GetPointsFromEntity -
+        //      Line/Polyline/Polyline2d ("кандидаты" на "эскиз формы"). Остальные объекты
+        //      (текст, атрибуты, штриховка, размерные линии и т.п.) в кандидаты не идут,
+        //      только считаются для общей картины.
+        //   4. Если кандидат РОВНО ОДИН - вызывает RebarRecognizer.Recognize() прямо на
+        //      нём (Recognize() открывает свою транзакцию через entityId.Database, поэтому
+        //      прекрасно работает и на "чужой", не активной Database, не только на
+        //      объектах текущего документа) и печатает, какой Type/A-F/R получился.
+        //   5. Если кандидатов 0 или больше 1 - печатает это отдельно: значит, форма в
+        //      этом шаблоне ЛИБО не нарисована одной линией/полилинией (несколько
+        //      несоединённых отрезков, или её вообще нет как отдельного объекта), и
+        //      Recognize() до неё в принципе не достучится без склейки сначала.
+        //
+        // ВАЖНО: команда НЕ пытается сама судить "правильный это Type или нет" - только
+        // печатает голые факты (что нашла, что вернул Recognize). Понять, для какого PZ_XX
+        // какой Type ДОЛЖЕН получиться - следующий шаг мозгового штурма, не эта команда.
+        [CommandMethod("PZSHAPECHECK")]
+        public static void CheckStandardShapeRecognitionCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            int candidateOne = 0;
+            int candidateZero = 0;
+            int candidateMany = 0;
+            int missingTemplate = 0;
+            int recognizedSomeType = 0;
+            int notRecognized99 = 0;
+
+            for (int i = 0; i <= 95; i++)
+            {
+                string code = i.ToString("D2");
+                string resourceName = $"PoseEdit2026.Resources.Standard.PZ_{code}.dwg";
+                string tempFile = Path.Combine(Path.GetTempPath(), "PZSHAPECHECK_" + code + ".dwg");
+
+                try
+                {
+                    LegacyCommands.ExtractEmbeddedResource(resourceName, tempFile);
+                }
+                catch (System.Exception)
+                {
+                    ed.WriteMessage($"\nPZ_{code}: template not found, skipped.");
+                    missingTemplate++;
+                    continue;
+                }
+
+                Database sourceDb = new Database(false, true);
+                try
+                {
+                    sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, null);
+
+                    using (Transaction tr = sourceDb.TransactionManager.StartTransaction())
+                    {
+                        BlockTable bt = (BlockTable)tr.GetObject(sourceDb.BlockTableId, OpenMode.ForRead);
+                        BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                        var candidates = new List<ObjectId>();
+                        int otherEntities = 0;
+                        foreach (ObjectId id in ms)
+                        {
+                            Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                            if (ent is Line || ent is Polyline || ent is Polyline2d)
+                                candidates.Add(id);
+                            else
+                                otherEntities++;
+                        }
+
+                        if (candidates.Count == 0)
+                        {
+                            candidateZero++;
+                            ed.WriteMessage($"\nPZ_{code}: 0 candidates ({otherEntities} other objects) - not testable as-is.");
+                        }
+                        else if (candidates.Count > 1)
+                        {
+                            candidateMany++;
+                            ed.WriteMessage($"\nPZ_{code}: {candidates.Count} candidates (ambiguous - not joined into one line/polyline).");
+                        }
+                        else
+                        {
+                            candidateOne++;
+                            RebarResult result = RebarRecognizer.Recognize(candidates[0]);
+                            if (result.Type == "99")
+                            {
+                                notRecognized99++;
+                                ed.WriteMessage($"\nPZ_{code}: NOT RECOGNIZED (99).");
+                            }
+                            else
+                            {
+                                recognizedSomeType++;
+                                ed.WriteMessage($"\nPZ_{code}: Type={result.Type} A={result.A} B={result.B} C={result.C} D={result.D} E={result.E} F={result.F} R={result.R}");
+                            }
+                        }
+
+                        tr.Commit();
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\nPZ_{code}: error reading template - {ex.Message}");
+                    missingTemplate++;
+                }
+                finally
+                {
+                    sourceDb.Dispose();
+                    try { File.Delete(tempFile); } catch (System.Exception) { /* временный файл, не критично */ }
+                }
+            }
+
+            ed.WriteMessage("\n\n=== PZSHAPECHECK summary ===");
+            ed.WriteMessage($"\nExactly 1 candidate found: {candidateOne} (of which recognized: {recognizedSomeType}, NOT recognized/99: {notRecognized99})");
+            ed.WriteMessage($"\n0 candidates (not testable): {candidateZero}");
+            ed.WriteMessage($"\nMultiple candidates (ambiguous): {candidateMany}");
+            ed.WriteMessage($"\nTemplate missing/unreadable: {missingTemplate}");
         }
     }
 }
