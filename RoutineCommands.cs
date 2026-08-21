@@ -525,5 +525,95 @@ namespace PoseEdit2026
             ed.WriteMessage($"\nMultiple candidates (ambiguous): {candidateMany}");
             ed.WriteMessage($"\nTemplate missing/unreadable: {missingTemplate}");
         }
+
+        // ====================================================================================
+        // КОМАНДА: PZSHAPEDETAIL — диагностика: дамп ВСЕХ объектов Model Space одного
+        // конкретного PZ_XX.dwg (слой, тип, координаты) - продолжение PZSHAPECHECK
+        // ====================================================================================
+        // ВРЕМЕННАЯ диагностическая команда (2026-08-21), тот же мозговой штурм что и у
+        // PZSHAPECHECK. PZSHAPECHECK показал: у 92 из 96 шаблонов НЕСКОЛЬКО отдельных
+        // Line/Polyline объектов (не одна цельная полилиния) - от 2 до 68 штук. Нужно
+        // понять, можно ли среди них по СЛОЮ отличить именно контур формы арматуры от
+        // размерных линий/выносок/штриховки - для этого печатаем слой+тип+координаты
+        // КАЖДОГО объекта одного шаблона (не только кандидатов, всех, включая текст,
+        // атрибуты и т.п.), чтобы увидеть реальную структуру.
+        [CommandMethod("PZSHAPEDETAIL")]
+        public static void ShowStandardShapeDetailCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptStringOptions codeOpts = new PromptStringOptions("\nPZ_XX code (naprimer 21): ") { AllowSpaces = false };
+            PromptResult codeRes = ed.GetString(codeOpts);
+            if (codeRes.Status != PromptStatus.OK) return;
+
+            string code = codeRes.StringResult.Trim();
+            if (int.TryParse(code, out int codeNum))
+                code = codeNum.ToString("D2");
+
+            string resourceName = $"PoseEdit2026.Resources.Standard.PZ_{code}.dwg";
+            string tempFile = Path.Combine(Path.GetTempPath(), "PZSHAPEDETAIL_" + code + ".dwg");
+
+            try
+            {
+                LegacyCommands.ExtractEmbeddedResource(resourceName, tempFile);
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nPZ_{code}: template not found - {ex.Message}");
+                return;
+            }
+
+            Database sourceDb = new Database(false, true);
+            try
+            {
+                sourceDb.ReadDwgFile(tempFile, FileOpenMode.OpenForReadAndAllShare, true, null);
+
+                using (Transaction tr = sourceDb.TransactionManager.StartTransaction())
+                {
+                    BlockTable bt = (BlockTable)tr.GetObject(sourceDb.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    ed.WriteMessage($"\n=== PZ_{code} Model Space contents ===");
+                    foreach (ObjectId id in ms)
+                    {
+                        Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (ent == null) continue;
+
+                        string kind = ent.GetType().Name;
+                        string layer = ent.Layer;
+
+                        if (ent is Line line)
+                        {
+                            ed.WriteMessage($"\n  Line   layer='{layer}'  ({line.StartPoint.X:F1},{line.StartPoint.Y:F1}) -> ({line.EndPoint.X:F1},{line.EndPoint.Y:F1})");
+                        }
+                        else if (ent is Polyline poly)
+                        {
+                            ed.WriteMessage($"\n  Polyline layer='{layer}'  {poly.NumberOfVertices} verts, closed={poly.Closed}");
+                        }
+                        else if (ent is Polyline2d)
+                        {
+                            ed.WriteMessage($"\n  Polyline2d layer='{layer}'");
+                        }
+                        else
+                        {
+                            ed.WriteMessage($"\n  {kind,-10} layer='{layer}'");
+                        }
+                    }
+
+                    tr.Commit();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nPZ_{code}: error reading template - {ex.Message}");
+            }
+            finally
+            {
+                sourceDb.Dispose();
+                try { File.Delete(tempFile); } catch (System.Exception) { /* временный файл, не критично */ }
+            }
+        }
     }
 }
