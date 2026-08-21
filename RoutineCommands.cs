@@ -686,6 +686,19 @@ namespace PoseEdit2026
 
                     Point3d firstPt = poly.NumberOfVertices > 0 ? poly.GetPoint3dAt(0) : Point3d.Origin;
                     ed.WriteMessage($"\nHandle={ent.Handle}  at=({firstPt.X:F0},{firstPt.Y:F0})  verts={poly.NumberOfVertices}  bulge={(hasBulge ? "YES" : "no")}  -> {(recognized ? $"Type={result.Type}" : "NOT RECOGNIZED (99)")}");
+
+                    // Для НЕ распознанных без дуги (без дуги - значит вершины честные, не
+                    // артефакт скругления) сразу печатаем ВСЕ координаты вершин - чтобы можно
+                    // было трассировать RebarRecognizer вручную по реальным цифрам, не гоняя
+                    // туда-сюда за каждым отдельным случаем.
+                    if (!recognized && !hasBulge)
+                    {
+                        for (int i = 0; i < poly.NumberOfVertices; i++)
+                        {
+                            Point3d v = poly.GetPoint3dAt(i);
+                            ed.WriteMessage($"\n    P{i + 1}=({v.X:F1},{v.Y:F1})");
+                        }
+                    }
                 }
 
                 tr.Commit();
