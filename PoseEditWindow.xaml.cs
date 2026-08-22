@@ -388,6 +388,13 @@ namespace PoseEdit2026
                     }
                 }
 
+                // Загрузка материала (MALZEME) из атрибута - раньше нигде не читалось, поэтому
+                // cmbMaterial всегда открывался пустым независимо от того, что было в блоке.
+                if (attributes.ContainsKey("MALZEME") && cmbMaterial.Items.Contains(attributes["MALZEME"]))
+                {
+                    cmbMaterial.SelectedItem = attributes["MALZEME"];
+                }
+
                 // ====================================================================================
                 // ОБНОВЛЕНИЕ txtPoseImage ПОСЛЕ ЗАГРУЗКИ ДАННЫХ
                 // ====================================================================================
@@ -666,6 +673,12 @@ namespace PoseEdit2026
                     newValues["NOTE"] = txtNote.Text.Trim();
                 }
 
+                // Сохраняем материал (MALZEME) - раньше cmbMaterial никогда не записывался в блок.
+                if (cmbMaterial.SelectedItem != null)
+                {
+                    newValues["MALZEME"] = cmbMaterial.SelectedItem.ToString();
+                }
+
                 // Размеры арматуры (A, B, C, D, E, F, R)
                 newValues["A"] = GetValueOrTag(txtA);
                 newValues["B"] = GetValueOrTag(txtB);
@@ -863,6 +876,7 @@ namespace PoseEdit2026
                 };
                 if (!string.IsNullOrWhiteSpace(txtSpace.Text)) newValues["ARALIK"] = txtSpace.Text.Trim();
                 if (!string.IsNullOrWhiteSpace(txtNote.Text))  newValues["NOTE"]   = txtNote.Text.Trim();
+                if (cmbMaterial.SelectedItem != null)          newValues["MALZEME"] = cmbMaterial.SelectedItem.ToString();
 
                 // Ищем все блоки RL-POS и RL-POS2 в чертеже
                 Document doc = App.DocumentManager.MdiActiveDocument;
