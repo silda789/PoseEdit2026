@@ -33,7 +33,6 @@
   <ItemGroup>
     <None Remove="Resources\RL-POS.dwg" />
     <None Remove="Resources\RL-POS2.dwg" />
-    <None Remove="Resources\Shape_00.png" />
     <None Remove="Resources\Shape_01.png" />
     <None Remove="Resources\Shape_02.png" />
     <None Remove="Resources\Shape_03.png" />
@@ -127,8 +126,6 @@
     <None Remove="Resources\Shape_91.png" />
     <None Remove="Resources\Shape_92.png" />
     <None Remove="Resources\Shape_93.png" />
-    <None Remove="Resources\Shape_94.png" />
-    <None Remove="Resources\Shape_95.png" />
     <!-- Файлы Shape_96.png - Shape_99.png не существуют - в папке Resources 96 картинок (00-95) -->
   </ItemGroup>
 
@@ -153,7 +150,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Resources\Shape_00.png" />
     <Resource Include="Resources\Shape_01.png" />
     <Resource Include="Resources\Shape_02.png" />
     <Resource Include="Resources\Shape_03.png" />
@@ -247,9 +243,8 @@
     <Resource Include="Resources\Shape_91.png" />
     <Resource Include="Resources\Shape_92.png" />
     <Resource Include="Resources\Shape_93.png" />
-    <Resource Include="Resources\Shape_94.png" />
-    <Resource Include="Resources\Shape_95.png" />
-    <!-- Файлы Shape_96.png - Shape_99.png не существуют - в папке Resources 96 картинок (00-95) -->
+    <!-- Файлы Shape_94.png - Shape_99.png не существуют - в папке Resources 93 картинки (01-93,
+         "00" упразднён 2026-08-22 - см. RebarRecognizer.cs) -->
   </ItemGroup>
 
 </Project>
