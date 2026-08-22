@@ -876,7 +876,7 @@ namespace PoseEdit2026
             string[] files = Directory.GetFiles(folder, "PZ_*.dwg");
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
 
-            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0;
+            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0, entitiesFixed = 0;
             Dictionary<string, int> layerFoundCounts = layerRenames.Keys.ToDictionary(k => k, k => 0);
 
             foreach (string path in files)
@@ -938,6 +938,38 @@ namespace PoseEdit2026
                                 sttr.XScale = newWidthFactor;
                                 sttr.ObliquingAngle = newObliqueDeg * Math.PI / 180.0;
                                 filesWithStyleFixed++;
+
+                                // ВАЖНО (обнаружено пользователем 2026-08-22 - "визуально не
+                                // поменялся, в свойствах 0.6"): смена XScale/ObliquingAngle у
+                                // самого TextStyleTableRecord НЕ откатывается на уже созданные
+                                // AttributeDefinition/DBText, которые на него ссылаются - у
+                                // каждого такого объекта своё СОБСТВЕННОЕ значение WidthFactor/
+                                // Oblique, скопированное со стиля один раз в момент создания, а
+                                // не живая ссылка на стиль. Нужно пройтись по всем блокам файла
+                                // и поправить каждый найденный объект с этим TextStyleId отдельно.
+                                BlockTable bt2 = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                                foreach (ObjectId btrId in bt2)
+                                {
+                                    BlockTableRecord btr2 = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead);
+                                    foreach (ObjectId entId in btr2)
+                                    {
+                                        DBObject obj = tr.GetObject(entId, OpenMode.ForRead);
+                                        if (obj is AttributeDefinition attDef && attDef.TextStyleId == styleId)
+                                        {
+                                            attDef.UpgradeOpen();
+                                            attDef.WidthFactor = newWidthFactor;
+                                            attDef.Oblique = newObliqueDeg * Math.PI / 180.0;
+                                            entitiesFixed++;
+                                        }
+                                        else if (obj is DBText dbText && dbText.TextStyleId == styleId)
+                                        {
+                                            dbText.UpgradeOpen();
+                                            dbText.WidthFactor = newWidthFactor;
+                                            dbText.Oblique = newObliqueDeg * Math.PI / 180.0;
+                                            entitiesFixed++;
+                                        }
+                                    }
+                                }
                             }
 
                             tr.Commit();
@@ -959,7 +991,8 @@ namespace PoseEdit2026
             }
 
             ed.WriteMessage($"\nPZSTDFIX: {files.Length} files found, {filesOk} saved OK, {filesFailed} failed, " +
-                             $"{totalLayerRenames} layer renames total, {filesWithStyleFixed} files had the text style fixed.");
+                             $"{totalLayerRenames} layer renames total, {filesWithStyleFixed} files had the text style fixed, " +
+                             $"{entitiesFixed} attribute/text objects had WidthFactor/Oblique fixed.");
 
             foreach (KeyValuePair<string, int> kvp in layerFoundCounts)
             {
