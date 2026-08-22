@@ -706,7 +706,7 @@ namespace PoseEdit2026
 
             switch (type)
             {
-                case "00": total = a; break;
+                case "00": case "01": total = a; break;
                 case "11": case "15": total = a + b; break;
                 case "21": case "25": case "41": total = a + b + c; break;
                 case "31": case "38": total = a + b + c + d + e_val; break;

@@ -1,4 +1,4 @@
-#nullable disable
+    #nullable disable
 
 using System;
 using System.Collections.Generic;
@@ -988,8 +988,11 @@ namespace PoseEdit2026
 
             int pozAdet = toplamBilgi.Count;
             int capAdet = capListe.Count;
-            int tipBilgiAdet = toplamBilgi.Count(x => x.Tip == "00"); // прямые стержни
-            int pozTipAdet   = toplamBilgi.Count(x => x.Tip != "00"); // с формой
+            // "01" - прямой стержень (номер "00" упразднён 2026-08-22, "01" занял его место
+            // и его роль - не печатать эскиз в таблице); "00" тоже проверяем, чтобы старые
+            // чертежи с уже сохранённым TIP=00 по-прежнему не печатались.
+            int tipBilgiAdet = toplamBilgi.Count(x => x.Tip == "00" || x.Tip == "01"); // прямые стержни
+            int pozTipAdet   = toplamBilgi.Count(x => x.Tip != "00" && x.Tip != "01"); // с формой
 
             const double sag   = 0.0;
             const double asagi = Math.PI * 1.5;
@@ -1104,7 +1107,7 @@ namespace PoseEdit2026
                 int j = 0;
                 for (int i = 0; i < pozAdet; i++)
                 {
-                    if (toplamBilgi[i].Tip == "00") continue;
+                    if (toplamBilgi[i].Tip == "00" || toplamBilgi[i].Tip == "01") continue;
                     T2(p002, toplamBilgi[i].Poz, toplamBilgi[i].Poz, yzy2,
                        sag, 0.5 * sut1_01, (j + 1.25) * sat1_02, (j + 1.75) * sat1_02, 1, 2);
 
