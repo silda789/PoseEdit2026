@@ -866,8 +866,14 @@ namespace PoseEdit2026
         private static void RenLine(BlockTableRecord space, Transaction tr,
             Point3d pt1, double angle, double dist, int lineType)
         {
+            // ВАЖНО (найдено 2026-08-22 - тот же "eKeyNotFound", уже после первого фикса):
+            // "Defpoints" - НЕ гарантированно встроенный слой, вопреки первому предположению.
+            // AutoCAD создаёт его автоматически только при первом простановленном размере
+            // (dimension) в чертеже - в чертеже без единого размера его попросту нет. Первый
+            // же вызов Line_ в таблице использует lineType=2 (→ "Defpoints"), поэтому крашилось
+            // сразу на первой линии. Убрано исключение - теперь проверяем/создаём оба слоя.
             string layerName = lineType == 1 ? "posedit.mtr.layer_l1" : "Defpoints";
-            if (layerName != "Defpoints") EnsureLayerExists(tr, space.Database, layerName);
+            EnsureLayerExists(tr, space.Database, layerName);
 
             Line line = new Line(pt1, Polar(pt1, angle, dist));
             line.Layer = layerName;
