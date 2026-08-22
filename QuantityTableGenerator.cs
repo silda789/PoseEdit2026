@@ -712,9 +712,9 @@ namespace PoseEdit2026
 
                 // C# 12: Используем collection expression для инициализации массива
                 string[] layers = [
-                    "ren.mtr.layer_l1",    // Основные линии таблиц
-                    "ren.mtr.layer_t1",    // Текст таблиц
-                    "ren.mtr.bar"          // Слой для таблиц
+                    "posedit.mtr.layer_l1",    // Основные линии таблиц
+                    "posedit.mtr.layer_t1",    // Текст таблиц
+                    "posedit.mtr.bar"          // Слой для таблиц
                 ];
 
                 foreach (string layerName in layers)
@@ -834,13 +834,13 @@ namespace PoseEdit2026
             => new Point3d(pt.X + dist * Math.Cos(angle), pt.Y + dist * Math.Sin(angle), pt.Z);
 
         // Рисует линию от pt1 в направлении angle на длину dist.
-        // lineType: 1 → "ren.mtr.layer_l1", иначе → "Defpoints".
+        // lineType: 1 → "posedit.mtr.layer_l1", иначе → "Defpoints".
         // Аналог LISP: REN_cizgi
         private static void RenLine(BlockTableRecord space, Transaction tr,
             Point3d pt1, double angle, double dist, int lineType)
         {
             Line line = new Line(pt1, Polar(pt1, angle, dist));
-            line.Layer = lineType == 1 ? "ren.mtr.layer_l1" : "Defpoints";
+            line.Layer = lineType == 1 ? "posedit.mtr.layer_l1" : "Defpoints";
             space.AppendEntity(line);
             tr.AddNewlyCreatedDBObject(line, true);
         }
@@ -869,7 +869,7 @@ namespace PoseEdit2026
             txt.TextString = text;
             txt.Height = height;
             txt.WidthFactor = widthFactor;
-            txt.Layer = "ren.mtr.layer_t1";
+            txt.Layer = "posedit.mtr.layer_t1";
             txt.TextStyleId = GetTextStyleId(db, tr);
 
             if (d72 == 0 && d73 == 0)

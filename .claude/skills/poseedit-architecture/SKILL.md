@@ -3,7 +3,7 @@ name: poseedit-architecture
 description: Per-file breakdown of what each core class in PoseEdit2026 does (Commands.cs, PoseEditWindow, AppSettings.cs, BlockHelper.cs, RebarRecognizer.cs, LayerCreator.cs, QuantityTableGenerator.cs, PozHelper.cs, LegacyCommands.cs, ExtensionApp.cs). Use when navigating the codebase, figuring out which file/class handles something, or before adding new functionality.
 ---
 
-**`Commands.cs`** — All `[CommandMethod]` entry points. The `EEN` command is the main flow: saves AutoCAD system variables (`CLAYER`, `DIMZIN`, `ATTREQ`), ensures the `ren.mtr.tb` layer exists, prompts for block selection or insertion point, extracts `RL-POS.dwg`/`RL-POS2.dwg` from embedded resources to a temp file, inserts them, then opens `PoseEditWindow`.
+**`Commands.cs`** — All `[CommandMethod]` entry points. The `EEN` command is the main flow: saves AutoCAD system variables (`CLAYER`, `DIMZIN`, `ATTREQ`), ensures the `posedit.mtr.tb` layer exists, prompts for block selection or insertion point, extracts `RL-POS.dwg`/`RL-POS2.dwg` from embedded resources to a temp file, inserts them, then opens `PoseEditWindow`.
 
 **`PoseEditWindow.xaml/.cs`** — Main WPF dialog. Displays 94 rebar shape images (`Shape_00.png`–`Shape_93.png`), material selectors, dimension fields (A–F, R), quantity, and notes. Writes results back to block attributes on dialog close.
 

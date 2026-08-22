@@ -760,7 +760,7 @@ namespace PoseEdit2026
         }
 
         // Рисует "стрелку" (полилиния с переменной шириной) от каждой позиции к общей точке.
-        // Аналог (command "pline" pt1 "w" 0 (* hk 0.080) pt2 "w" 0 0 pt3 "") на слое "ren.arrow"
+        // Аналог (command "pline" pt1 "w" 0 (* hk 0.080) pt2 "w" 0 0 pt3 "") на слое "posedit.arrow"
         private static void DrawArrowsToPoint(Database db, List<ObjectId> ids, Point3d target, double hk)
         {
             int oldOsmode = (int)Application.GetSystemVariable("OSMODE");
@@ -769,7 +769,7 @@ namespace PoseEdit2026
             {
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
-                    EnsureLayer(tr, db, "ren.arrow");
+                    EnsureLayer(tr, db, "posedit.arrow");
                     BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
                     BlockTableRecord ms = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
 
@@ -785,7 +785,7 @@ namespace PoseEdit2026
                         pl.AddVertexAt(0, new Point2d(pt1.X, pt1.Y), 0, 0, hk * 0.080);
                         pl.AddVertexAt(1, new Point2d(pt2.X, pt2.Y), 0, 0, 0);
                         pl.AddVertexAt(2, new Point2d(target.X, target.Y), 0, 0, 0);
-                        pl.Layer = "ren.arrow";
+                        pl.Layer = "posedit.arrow";
 
                         ms.AppendEntity(pl);
                         tr.AddNewlyCreatedDBObject(pl, true);
@@ -1223,7 +1223,7 @@ namespace PoseEdit2026
                 {
                     newRef.ScaleFactors = new Scale3d(insScale, insScale, insScale);
                     newRef.Rotation = aci;
-                    newRef.Layer = "ren.mtr.Pos";
+                    newRef.Layer = "posedit.mtr.Pos";
                     ms.AppendEntity(newRef);
                     tr.AddNewlyCreatedDBObject(newRef, true);
 
@@ -1503,7 +1503,7 @@ namespace PoseEdit2026
         // ====================================================================================
         // КОМАНДА: POZCLAYERN (было "pozclayer" в LISP)
         // ====================================================================================
-        // НАЗНАЧЕНИЕ: Переносит все блоки RL-POS на слой "ren.mtr.tb", создавая слой,
+        // НАЗНАЧЕНИЕ: Переносит все блоки RL-POS на слой "posedit.mtr.tb", создавая слой,
         // если он ещё не существует.
         // ПЕРЕВЕДЕНО ИЗ: (defun c:pozclayer (/) ...) — QUANTITY2.LSP, строки ~66-69
         [CommandMethod("POZCLAYERN")]
@@ -1523,17 +1523,17 @@ namespace PoseEdit2026
 
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                EnsureLayer(tr, db, "ren.mtr.tb");
+                EnsureLayer(tr, db, "posedit.mtr.tb");
                 foreach (ObjectId id in selRes.Value.GetObjectIds())
                 {
                     BlockReference blkRef = tr.GetObject(id, OpenMode.ForWrite) as BlockReference;
                     if (blkRef == null) continue;
-                    blkRef.Layer = "ren.mtr.tb";
+                    blkRef.Layer = "posedit.mtr.tb";
                 }
                 tr.Commit();
             }
 
-            ed.WriteMessage($"\n{selRes.Value.Count} poz \"ren.mtr.tb\" katmanina tasindi.");
+            ed.WriteMessage($"\n{selRes.Value.Count} poz \"posedit.mtr.tb\" katmanina tasindi.");
         }
 
         // ====================================================================================

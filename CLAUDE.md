@@ -60,7 +60,7 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `POZVERN` | `LegacyCommands.AutoNumberPositionsCommand` | Auto-assign POZ numbers, grouping identical-geometry positions | `pozver` |
 | `77N` | `LegacyCommands.CreateLinkedCalloutCommand` | Create a linked RL-POS2 callout block with ACAD_FIELD references | `77` |
 | `PZGN` | `LegacyCommands.SyncBlockDefinitionCommand` | Redefine RL-POS from the embedded template and ATTSYNC all instances (batch op — save first) | `pzg` |
-| `POZCLAYERN` | `LegacyCommands.MoveToRenMtrTbLayerCommand` | Move all RL-POS blocks to layer `ren.mtr.tb`, creating it if missing | `pozclayer` |
+| `POZCLAYERN` | `LegacyCommands.MoveToRenMtrTbLayerCommand` | Move all RL-POS blocks to layer `posedit.mtr.tb`, creating it if missing | `pozclayer` |
 | `TDDBN` | `LegacyCommands.CalculateBendLengthCommand` | Compute rebar length from A-F/R using per-shape-type coefficients (`Resources/PZ_TUM.txt`), write to BOY | `tddb` |
 | `POZSILN` | `LegacyCommands.ClearPozCommand` | Reset POZ to `0` on selected RL-POS blocks (undo of POZVERN's numbering) | `pozsil` |
 | `LAYSHIFT` | `RoutineCommands.ShiftLayoutNumbersCommand` | Renumber every numbered Layout tab by a constant offset (e.g. all 55-199 -> 66-211) | — |

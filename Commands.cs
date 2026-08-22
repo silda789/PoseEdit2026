@@ -31,7 +31,7 @@ namespace PoseEdit2026
         private const string ResourceName2 = "PoseEdit2026.Resources.RL-POS2.dwg";
 
         // Имя слоя, на который мы будем автоматически помещать наши блоки.
-        private const string TargetLayer = "ren.mtr.tb";
+        private const string TargetLayer = "posedit.mtr.tb";
 
         // Загружаем настройки один раз при первом запуске любой команды.
         private static bool _settingsLoaded = false;
@@ -81,7 +81,7 @@ namespace PoseEdit2026
                 // Иначе при вставке блока AutoCAD "зависнет", ожидая, что пользователь введет текст атрибутов.
                 Application.SetSystemVariable("ATTREQ", 0);
 
-                // Проверяем, существует ли слой "ren.mtr.tb". Если нет — создаем его.
+                // Проверяем, существует ли слой "posedit.mtr.tb". Если нет — создаем его.
                 EnsureLayerExists(db, TargetLayer);
 
                 // 3. ВЫБОР ОБЪЕКТА
