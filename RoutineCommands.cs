@@ -806,8 +806,10 @@ namespace PoseEdit2026
         //      только префикс, не исправляем чужую опечатку).
         //   2. Текстовый стиль "ren Gost.common" -> "posedit.ISOCPEUR": имя, шрифт (GOST
         //      Common -> ISOCPEUR), ширину (0.7 -> 0.9), уклон (10° -> 0°) - плюс WidthFactor/
-        //      Oblique каждого AttributeDefinition/DBText, уже ссылающегося на этот стиль (см.
-        //      ниже почему это отдельный шаг, не просто смена стиля).
+        //      Oblique/Height каждого AttributeDefinition/DBText, уже ссылающегося на этот
+        //      стиль (см. ниже почему это отдельный шаг, не просто смена стиля). Height
+        //      выставляется в 20 (было 25) - расчёт под RQTN'ов масштаб текста таблицы, см.
+        //      комментарий у константы newAttributeHeight ниже.
         //   3. Цвет кодового номера формы (текст "01".."93", встроенный в каждый шаблон для
         //      справки - какой это номер каталога) -> ACI 144. Ищем DBText/AttributeDefinition,
         //      чей текст ТОЧНО совпадает с номером из имени файла (PZ_08.dwg -> "08").
@@ -880,6 +882,18 @@ namespace PoseEdit2026
             const string newStyleTypeface = "ISOCPEUR";
             const double newWidthFactor = 0.9;
             const double newObliqueDeg = 0.0;
+            // ВАЖНО (найдено пользователем 2026-08-22 - "текст эскизов больше основного, 150 vs
+            // 187.5 при 1:50"): высота A-F атрибутов внутри шаблона (Height=25, как в реальном
+            // блоке) - это НЕЗАВИСИМОЕ от масштаба чертежа значение, отдельное от XScale/
+            // ObliquingAngle стиля. QuantityTableGenerator.cs вставляет блок PZ_XX с
+            // BlockReference.ScaleFactors = (sut1_02/450, sat1_02/100), где sat1_02 = olcek*1.50
+            // - то есть вертикальный масштаб блока = olcek*0.015. Текст ОСНОВНОЙ таблицы рисуется
+            // с высотой yzy2 = olcek*0.30 напрямую (RenText). Чтобы после масштабирования блока
+            // итоговая высота атрибута совпала с высотой текста таблицы ПРИ ЛЮБОМ масштабе
+            // чертежа (olcek сокращается): 25 * (olcek*0.015) != olcek*0.30, а нужно
+            // templateHeight * 0.015 == 0.30 => templateHeight == 20. Проверено на примере
+            // пользователя: 20*7.5=150 (было 25*7.5=187.5 - именно то расхождение, что он видел).
+            const double newAttributeHeight = 20.0;
             // Цвет кодового номера формы (текст "01".."93", встроенный в каждый шаблон) - ACI.
             const short newCodeLabelColorIndex = 144;
             // Цвет слоя posedit.mtr.hidden - ACI (по просьбе пользователя, 2026-08-22).
@@ -1018,6 +1032,7 @@ namespace PoseEdit2026
                                         attDef.UpgradeOpen();
                                         attDef.WidthFactor = newWidthFactor;
                                         attDef.Oblique = newObliqueDeg * Math.PI / 180.0;
+                                        attDef.Height = newAttributeHeight;
                                         entitiesFixed++;
                                     }
                                     else if (!styleId.IsNull && obj is DBText dbText && dbText.TextStyleId == styleId)
@@ -1025,6 +1040,7 @@ namespace PoseEdit2026
                                         dbText.UpgradeOpen();
                                         dbText.WidthFactor = newWidthFactor;
                                         dbText.Oblique = newObliqueDeg * Math.PI / 180.0;
+                                        dbText.Height = newAttributeHeight;
                                         entitiesFixed++;
                                     }
 
