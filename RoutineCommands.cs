@@ -805,7 +805,12 @@ namespace PoseEdit2026
         //      "length" сохранена намеренно, раз она уже есть в реальных слоях - меняем
         //      только префикс, не исправляем чужую опечатку).
         //   2. Текстовый стиль "ren Gost.common" -> "posedit.ISOCPEUR": имя, шрифт (GOST
-        //      Common -> ISOCPEUR), ширину (0.7 -> 0.9), уклон (10° -> 0°).
+        //      Common -> ISOCPEUR), ширину (0.7 -> 0.9), уклон (10° -> 0°) - плюс WidthFactor/
+        //      Oblique каждого AttributeDefinition/DBText, уже ссылающегося на этот стиль (см.
+        //      ниже почему это отдельный шаг, не просто смена стиля).
+        //   3. Цвет кодового номера формы (текст "01".."93", встроенный в каждый шаблон для
+        //      справки - какой это номер каталога) -> ACI 144. Ищем DBText/AttributeDefinition,
+        //      чей текст ТОЧНО совпадает с номером из имени файла (PZ_08.dwg -> "08").
         //
         // ВАЖНО (исправлено 2026-08-22 - первая версия ошибочно ставила SHX-файл): "ISOCPEUR"
         // - это Windows TrueType-шрифт (см. "ISOCPEUR (windows fonts)" от пользователя), а
@@ -863,6 +868,9 @@ namespace PoseEdit2026
                 ["ren.mtr.lenght"] = "posedit.mtr.lenght",
                 ["ren.mtr.tb"] = "posedit.mtr.tb",
                 ["ren.mtr.text"] = "posedit.mtr.text",
+                // Замечен пользователем 2026-08-22 (скриншот Layer Properties Manager) - лишний
+                // слой без ".mtr." в имени, не попадавший под изначальный список выше.
+                ["ren.hidden"] = "posedit.hidden",
             };
 
             const string oldStyleName = "ren Gost.common";
@@ -872,12 +880,18 @@ namespace PoseEdit2026
             const string newStyleTypeface = "ISOCPEUR";
             const double newWidthFactor = 0.9;
             const double newObliqueDeg = 0.0;
+            // Цвет кодового номера формы (текст "01".."93", встроенный в каждый шаблон) - ACI.
+            const short newCodeLabelColorIndex = 144;
+            // Цвет слоя posedit.mtr.hidden - ACI (по просьбе пользователя, 2026-08-22).
+            const string hiddenLayerName = "posedit.mtr.hidden";
+            const short hiddenLayerColorIndex = 144;
 
             string[] files = Directory.GetFiles(folder, "PZ_*.dwg");
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
 
-            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0, entitiesFixed = 0;
+            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0, entitiesFixed = 0, codeLabelsFixed = 0, hiddenLayerColorFixed = 0;
             Dictionary<string, int> layerFoundCounts = layerRenames.Keys.ToDictionary(k => k, k => 0);
+            List<string> filesWithoutCodeLabel = new List<string>();
 
             foreach (string path in files)
             {
@@ -903,6 +917,18 @@ namespace PoseEdit2026
                                 LayerTableRecord ltr = (LayerTableRecord)tr.GetObject(lt[rename.Key], OpenMode.ForWrite);
                                 ltr.Name = rename.Value;
                                 totalLayerRenames++;
+                            }
+
+                            // --- Цвет слоя posedit.mtr.hidden -> ACI 144 (по просьбе пользователя,
+                            // 2026-08-22). Проверяем ПОСЛЕ переименования выше, чтобы отработать
+                            // и для файлов, где слой только что переименован из "ren.mtr.hidden"
+                            // в этом же проходе, и для файлов, где он уже был "posedit.mtr.hidden".
+                            if (lt.Has(hiddenLayerName))
+                            {
+                                LayerTableRecord hiddenLtr = (LayerTableRecord)tr.GetObject(lt[hiddenLayerName], OpenMode.ForWrite);
+                                hiddenLtr.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                                    Autodesk.AutoCAD.Colors.ColorMethod.ByAci, hiddenLayerColorIndex);
+                                hiddenLayerColorFixed++;
                             }
 
                             // --- Текстовый стиль (нормализованный поиск по имени) ---
@@ -938,39 +964,65 @@ namespace PoseEdit2026
                                 sttr.XScale = newWidthFactor;
                                 sttr.ObliquingAngle = newObliqueDeg * Math.PI / 180.0;
                                 filesWithStyleFixed++;
+                            }
 
-                                // ВАЖНО (обнаружено пользователем 2026-08-22 - "визуально не
-                                // поменялся, в свойствах 0.6"): смена XScale/ObliquingAngle у
-                                // самого TextStyleTableRecord НЕ откатывается на уже созданные
-                                // AttributeDefinition/DBText, которые на него ссылаются - у
-                                // каждого такого объекта своё СОБСТВЕННОЕ значение WidthFactor/
-                                // Oblique, скопированное со стиля один раз в момент создания, а
-                                // не живая ссылка на стиль. Нужно пройтись по всем блокам файла
-                                // и поправить каждый найденный объект с этим TextStyleId отдельно.
-                                BlockTable bt2 = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                                foreach (ObjectId btrId in bt2)
+                            // ВАЖНО (обнаружено пользователем 2026-08-22 - "визуально не
+                            // поменялся, в свойствах 0.6"): смена XScale/ObliquingAngle у самого
+                            // TextStyleTableRecord НЕ откатывается на уже созданные
+                            // AttributeDefinition/DBText, которые на него ссылаются - у каждого
+                            // такого объекта своё СОБСТВЕННОЕ значение WidthFactor/Oblique,
+                            // скопированное со стиля один раз в момент создания, а не живая
+                            // ссылка на стиль. Проходим по всем блокам файла и правим каждый
+                            // найденный объект с этим TextStyleId отдельно. Заодно (в этом же
+                            // проходе, чтобы не сканировать файл дважды) красим кодовый номер
+                            // формы (текст "01".."93", встроенный в каждый шаблон для справки -
+                            // сам номер = имя файла без "PZ_"/".dwg") в ACI-цвет 144, по
+                            // прямой просьбе пользователя ("цвет кодового номера каждой
+                            // арматуры на 144").
+                            string expectedCode = Path.GetFileNameWithoutExtension(fileName).Replace("PZ_", "");
+                            bool codeLabelFoundInFile = false;
+                            BlockTable bt2 = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                            foreach (ObjectId btrId in bt2)
+                            {
+                                BlockTableRecord btr2 = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead);
+                                foreach (ObjectId entId in btr2)
                                 {
-                                    BlockTableRecord btr2 = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead);
-                                    foreach (ObjectId entId in btr2)
+                                    DBObject obj = tr.GetObject(entId, OpenMode.ForRead);
+
+                                    if (!styleId.IsNull && obj is AttributeDefinition attDef && attDef.TextStyleId == styleId)
                                     {
-                                        DBObject obj = tr.GetObject(entId, OpenMode.ForRead);
-                                        if (obj is AttributeDefinition attDef && attDef.TextStyleId == styleId)
-                                        {
-                                            attDef.UpgradeOpen();
-                                            attDef.WidthFactor = newWidthFactor;
-                                            attDef.Oblique = newObliqueDeg * Math.PI / 180.0;
-                                            entitiesFixed++;
-                                        }
-                                        else if (obj is DBText dbText && dbText.TextStyleId == styleId)
-                                        {
-                                            dbText.UpgradeOpen();
-                                            dbText.WidthFactor = newWidthFactor;
-                                            dbText.Oblique = newObliqueDeg * Math.PI / 180.0;
-                                            entitiesFixed++;
-                                        }
+                                        attDef.UpgradeOpen();
+                                        attDef.WidthFactor = newWidthFactor;
+                                        attDef.Oblique = newObliqueDeg * Math.PI / 180.0;
+                                        entitiesFixed++;
+                                    }
+                                    else if (!styleId.IsNull && obj is DBText dbText && dbText.TextStyleId == styleId)
+                                    {
+                                        dbText.UpgradeOpen();
+                                        dbText.WidthFactor = newWidthFactor;
+                                        dbText.Oblique = newObliqueDeg * Math.PI / 180.0;
+                                        entitiesFixed++;
+                                    }
+
+                                    if (obj is AttributeDefinition adCode && adCode.TextString.Trim() == expectedCode)
+                                    {
+                                        adCode.UpgradeOpen();
+                                        adCode.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                                            Autodesk.AutoCAD.Colors.ColorMethod.ByAci, newCodeLabelColorIndex);
+                                        codeLabelsFixed++;
+                                        codeLabelFoundInFile = true;
+                                    }
+                                    else if (obj is DBText textCode && textCode.TextString.Trim() == expectedCode)
+                                    {
+                                        textCode.UpgradeOpen();
+                                        textCode.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                                            Autodesk.AutoCAD.Colors.ColorMethod.ByAci, newCodeLabelColorIndex);
+                                        codeLabelsFixed++;
+                                        codeLabelFoundInFile = true;
                                     }
                                 }
                             }
+                            if (!codeLabelFoundInFile) filesWithoutCodeLabel.Add(fileName);
 
                             tr.Commit();
                         }
@@ -992,7 +1044,13 @@ namespace PoseEdit2026
 
             ed.WriteMessage($"\nPZSTDFIX: {files.Length} files found, {filesOk} saved OK, {filesFailed} failed, " +
                              $"{totalLayerRenames} layer renames total, {filesWithStyleFixed} files had the text style fixed, " +
-                             $"{entitiesFixed} attribute/text objects had WidthFactor/Oblique fixed.");
+                             $"{entitiesFixed} attribute/text objects had WidthFactor/Oblique fixed, " +
+                             $"{codeLabelsFixed} code-number labels recolored to ACI {newCodeLabelColorIndex}, " +
+                             $"{hiddenLayerColorFixed} files had layer '{hiddenLayerName}' recolored to ACI {hiddenLayerColorIndex}.");
+
+            if (filesWithoutCodeLabel.Count > 0)
+                ed.WriteMessage($"\n{filesWithoutCodeLabel.Count} file(s) had no code-number label matching their own " +
+                                 $"number (checked as plain text == filename digits): {string.Join(", ", filesWithoutCodeLabel)}");
 
             foreach (KeyValuePair<string, int> kvp in layerFoundCounts)
             {
