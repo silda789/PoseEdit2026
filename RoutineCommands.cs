@@ -786,5 +786,171 @@ namespace PoseEdit2026
 
             ed.WriteMessage($"\nZoomed to and selected handle '{handleText}'.");
         }
+
+        // ====================================================================================
+        // КОМАНДА: PZSTDFIX — батч-правка слоёв/текстового стиля во всех PZ_XX.dwg
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: пользователь переименовал слои с префиксом "ren." на "posedit." по
+        // всему C#-коду (RebarRecognizer.cs/LegacyCommands.cs/QuantityTableGenerator.cs), но
+        // это не трогает сами ЭТАЛОННЫЕ DWG-файлы в Resources/Standard/PZ_01.dwg..PZ_93.dwg -
+        // они хранят СВОИ СОБСТВЕННЫЕ таблицы слоёв/текстовых стилей внутри бинарного DWG,
+        // отдельно от того, что делает C#-код при вставке. Эта команда правит все 93 файла
+        // "не открывая" их в редакторе AutoCAD - через side-database (Database(false,true) +
+        // ReadDwgFile), тот же приём, что и у PZREDEFN/PZSHAPECHECK выше, только тут мы не
+        // просто ЧИТАЕМ шаблон, а ПРАВИМ и СОХРАНЯЕМ обратно на диск.
+        //
+        // ЧТО ПРАВИТ в каждом файле:
+        //   1. Слои: ren.mtr.bar/hidden/lenght/tb/text -> posedit.mtr.bar/hidden/lenght/tb/text
+        //      (переименование через LayerTableRecord.Name - опечатка "lenght" вместо
+        //      "length" сохранена намеренно, раз она уже есть в реальных слоях - меняем
+        //      только префикс, не исправляем чужую опечатку).
+        //   2. Текстовый стиль "ren Gost.common" -> "posedit.ISOCPEUR": имя, шрифт (GOST
+        //      Common -> isocpeur.shx), ширину (0.7 -> 0.9), уклон (10° -> 0°).
+        //
+        // ВАЖНО: имя текстового стиля ищется НЕ строго по символам, а по "нормализованному"
+        // сравнению (без точек/пробелов/подчёркиваний, без учёта регистра) - если реальное
+        // имя в файле слегка отличается от того, что продиктовал пользователь (например,
+        // "REN.GOST.COMMON" вместо "ren Gost.common"), стиль всё равно найдётся. Слои и файл,
+        // где стиль НЕ нашёлся вообще ни разу за весь проход, отдельно перечисляются в конце -
+        // это сигнал, что имя реально другое и нужно уточнить у пользователя, а не молча
+        // гадать дальше.
+        //
+        // БЕЗОПАСНОСТЬ: каждый файл сохраняется через временный "*.dwg.tmp" рядом, и только
+        // после успешного SaveAs + Dispose оригинал заменяется (File.Delete + File.Move) -
+        // если что-то упадёт посреди записи, оригинальный файл не пострадает. Ошибка на
+        // одном файле не останавливает обработку остальных (try/catch на файл, не на всю
+        // команду) - в конце печатается сводка.
+        [CommandMethod("PZSTDFIX")]
+        public static void FixStandardTemplateLayersAndStyleCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptStringOptions folderOpts = new PromptStringOptions(
+                "\nFolder with PZ_XX.dwg templates: ")
+            {
+                DefaultValue = @"C:\Users\durum\Documents\GitHub\PoseEdit2026\Resources\Standard",
+                UseDefaultValue = true,
+                AllowSpaces = true
+            };
+            PromptResult folderRes = ed.GetString(folderOpts);
+            if (folderRes.Status != PromptStatus.OK) return;
+            string folder = folderRes.StringResult;
+
+            if (!Directory.Exists(folder))
+            {
+                ed.WriteMessage($"\nFolder not found: {folder}");
+                return;
+            }
+
+            // Старое имя -> новое имя. "lenght" - существующая опечатка в реальных слоях,
+            // сохранена намеренно (меняем только префикс "ren." -> "posedit.").
+            Dictionary<string, string> layerRenames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ren.mtr.bar"] = "posedit.mtr.bar",
+                ["ren.mtr.hidden"] = "posedit.mtr.hidden",
+                ["ren.mtr.lenght"] = "posedit.mtr.lenght",
+                ["ren.mtr.tb"] = "posedit.mtr.tb",
+                ["ren.mtr.text"] = "posedit.mtr.text",
+            };
+
+            const string oldStyleName = "ren Gost.common";
+            const string newStyleName = "posedit.ISOCPEUR";
+            const string newStyleFont = "isocpeur.shx";
+            const double newWidthFactor = 0.9;
+            const double newObliqueDeg = 0.0;
+
+            string[] files = Directory.GetFiles(folder, "PZ_*.dwg");
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+
+            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0;
+            Dictionary<string, int> layerFoundCounts = layerRenames.Keys.ToDictionary(k => k, k => 0);
+
+            foreach (string path in files)
+            {
+                string fileName = Path.GetFileName(path);
+                string tempPath = path + ".tmp";
+                try
+                {
+                    using (Database db = new Database(false, true))
+                    {
+                        db.ReadDwgFile(path, FileOpenMode.OpenForReadAndAllShare, true, null);
+
+                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                        {
+                            // --- Слои ---
+                            LayerTable lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                            foreach (KeyValuePair<string, string> rename in layerRenames)
+                            {
+                                if (!lt.Has(rename.Key)) continue;
+                                layerFoundCounts[rename.Key]++;
+
+                                if (lt.Has(rename.Value)) continue; // целевое имя уже занято - пропускаем, не переименовываем
+
+                                LayerTableRecord ltr = (LayerTableRecord)tr.GetObject(lt[rename.Key], OpenMode.ForWrite);
+                                ltr.Name = rename.Value;
+                                totalLayerRenames++;
+                            }
+
+                            // --- Текстовый стиль (нормализованный поиск по имени) ---
+                            TextStyleTable stt = (TextStyleTable)tr.GetObject(db.TextStyleTableId, OpenMode.ForRead);
+                            ObjectId styleId = ObjectId.Null;
+                            foreach (ObjectId id in stt)
+                            {
+                                TextStyleTableRecord candidate = (TextStyleTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                                if (NormalizeStyleName(candidate.Name) == NormalizeStyleName(oldStyleName))
+                                {
+                                    styleId = id;
+                                    break;
+                                }
+                            }
+                            if (!styleId.IsNull)
+                            {
+                                TextStyleTableRecord sttr = (TextStyleTableRecord)tr.GetObject(styleId, OpenMode.ForWrite);
+                                if (!stt.Has(newStyleName)) sttr.Name = newStyleName;
+                                sttr.FileName = newStyleFont;
+                                sttr.XScale = newWidthFactor;
+                                sttr.ObliquingAngle = newObliqueDeg * Math.PI / 180.0;
+                                filesWithStyleFixed++;
+                            }
+
+                            tr.Commit();
+                        }
+
+                        db.SaveAs(tempPath, DwgVersion.Current);
+                    }
+
+                    File.Delete(path);
+                    File.Move(tempPath, path);
+                    filesOk++;
+                }
+                catch (System.Exception ex)
+                {
+                    filesFailed++;
+                    ed.WriteMessage($"\n{fileName}: ERROR {ex.Message}");
+                    if (File.Exists(tempPath)) { try { File.Delete(tempPath); } catch { } }
+                }
+            }
+
+            ed.WriteMessage($"\nPZSTDFIX: {files.Length} files found, {filesOk} saved OK, {filesFailed} failed, " +
+                             $"{totalLayerRenames} layer renames total, {filesWithStyleFixed} files had the text style fixed.");
+
+            foreach (KeyValuePair<string, int> kvp in layerFoundCounts)
+            {
+                if (kvp.Value == 0)
+                    ed.WriteMessage($"\nLayer '{kvp.Key}' was never found in any file - check the exact name.");
+            }
+            if (filesWithStyleFixed == 0)
+                ed.WriteMessage($"\nText style '{oldStyleName}' was never found in any file - check the exact name.");
+        }
+
+        // Сравнение имён текстовых стилей без учёта точек/пробелов/подчёркиваний/регистра -
+        // так реальное имя в DWG может слегка отличаться по пунктуации от того, что
+        // продиктовал пользователь, и всё равно найдётся.
+        private static string NormalizeStyleName(string name)
+        {
+            return (name ?? "").Replace(".", "").Replace(" ", "").Replace("_", "").ToLowerInvariant();
+        }
     }
 }

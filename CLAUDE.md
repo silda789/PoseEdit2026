@@ -67,7 +67,8 @@ a LISP command gets an `N` suffix (the same convention already used for `EE` →
 | `LAYRENUM` | `RoutineCommands.RenumberLayoutsSequentiallyCommand` | Renumber every numbered Layout tab sequentially from a given start value, in tab order (e.g. start=55 -> 55,56,57,...) | — |
 | `VPLOCKALL` | `RoutineCommands.LockAllViewportsCommand` | Lock every floating viewport (VPLOCK) on every Layout that isn't already locked | — |
 | `MAGICPRINT` | `PrintCommands.MagicPrintCommand` | Auto-detect each Layout's sheet border (largest closed polyline), match it to a paper size, and plot every recognized Layout 1:1 into one combined PDF via `AutoCAD PDF (High Quality Print).pc3` | — |
-| `PZREDEFN` | `LegacyCommands.RedefineStandardShapeBlocksCommand` | Redefine block definitions `PZ_00`..`PZ_95` from embedded DWG templates and ATTSYNC any found instances (batch op — save first) | `pzredef` |
+| `PZREDEFN` | `LegacyCommands.RedefineStandardShapeBlocksCommand` | Redefine block definitions `PZ_01`..`PZ_93` from embedded DWG templates and ATTSYNC any found instances (batch op — save first) | `pzredef` |
+| `PZSTDFIX` | `RoutineCommands.FixStandardTemplateLayersAndStyleCommand` | Dev utility: batch-rename the `ren.*` layers and fix the text style (name/font/width/oblique) directly inside every `Resources/Standard/PZ_XX.dwg` source file, via side-database (no need to open each file) | — |
 
 ### Not ported
 
