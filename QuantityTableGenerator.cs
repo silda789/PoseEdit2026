@@ -172,7 +172,13 @@ namespace PoseEdit2026
             }
             catch (System.Exception ex)
             {
+                // ВРЕМЕННО расширенная диагностика (2026-08-22) - пользователь поймал
+                // "Error: eKeyNotFound" без указания, в какой именно строке кода это
+                // произошло. Печатаем тип исключения и стек вызовов, чтобы точно найти
+                // источник (после диагностики можно вернуть обратно к ex.Message).
                 ed.WriteMessage($"\nError: {ex.Message}");
+                ed.WriteMessage($"\n[DIAG] Type: {ex.GetType().FullName}");
+                ed.WriteMessage($"\n[DIAG] StackTrace: {ex.StackTrace}");
             }
         }
 
@@ -836,19 +842,45 @@ namespace PoseEdit2026
         // Рисует линию от pt1 в направлении angle на длину dist.
         // lineType: 1 → "posedit.mtr.layer_l1", иначе → "Defpoints".
         // Аналог LISP: REN_cizgi
+        // ВАЖНО (найдено 2026-08-22 по точному stack trace от пользователя - "Error:
+        // eKeyNotFound" в Entity.set_Layer внутри RenLine): CreateMetrajLayers создаёт три
+        // слоя в НАЧАЛЕ RQTN, но само присвоение .Layer в RenLine/RenText происходит гораздо
+        // позже, уже внутри своей отдельной транзакции DrawTablesCore - причина, по которой
+        // слой иногда не находится к этому моменту (например, если между вызовами что-то
+        // меняет активный документ/чертёж), точно не установлена статическим чтением кода, но
+        // независимо от причины - самое надёжное решение - проверять/создавать слой ПРЯМО
+        // ПЕРЕД присвоением, а не полагаться только на однократный вызов в начале команды.
+        private static void EnsureLayerExists(Transaction tr, Database db, string layerName)
+        {
+            LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+            if (lt == null || lt.Has(layerName)) return;
+
+            lt.UpgradeOpen();
+            LayerTableRecord newLayer = new LayerTableRecord { Name = layerName };
+            newLayer.Color = Color.FromColorIndex(ColorMethod.ByAci, 7);
+            lt.Add(newLayer);
+            tr.AddNewlyCreatedDBObject(newLayer, true);
+            lt.DowngradeOpen();
+        }
+
         private static void RenLine(BlockTableRecord space, Transaction tr,
             Point3d pt1, double angle, double dist, int lineType)
         {
+            string layerName = lineType == 1 ? "posedit.mtr.layer_l1" : "Defpoints";
+            if (layerName != "Defpoints") EnsureLayerExists(tr, space.Database, layerName);
+
             Line line = new Line(pt1, Polar(pt1, angle, dist));
-            line.Layer = lineType == 1 ? "posedit.mtr.layer_l1" : "Defpoints";
+            line.Layer = layerName;
             space.AppendEntity(line);
             tr.AddNewlyCreatedDBObject(line, true);
         }
 
-        // Возвращает ObjectId текстового стиля: "ren Gost.common" или стиль по умолчанию.
+        // Возвращает ObjectId текстового стиля: "posedit.ISOCPEUR" (был "ren Gost.common" до
+        // переименования 2026-08-22) или стиль по умолчанию, если такого стиля в чертеже нет.
         private static ObjectId GetTextStyleId(Database db, Transaction tr)
         {
             TextStyleTable tst = tr.GetObject(db.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
+            if (tst != null && tst.Has("posedit.ISOCPEUR")) return tst["posedit.ISOCPEUR"];
             if (tst != null && tst.Has("ren Gost.common")) return tst["ren Gost.common"];
             return db.Textstyle;
         }
@@ -864,6 +896,8 @@ namespace PoseEdit2026
         {
             if (string.IsNullOrEmpty(text)) return;
             Point3d pt = Polar(Polar(basePt, angle1, dist1), angle2, dist2);
+
+            EnsureLayerExists(tr, db, "posedit.mtr.layer_t1");
 
             DBText txt = new DBText();
             txt.TextString = text;
