@@ -1539,11 +1539,11 @@ namespace PoseEdit2026
         // ====================================================================================
         // КОМАНДА: PZREDEFN (было "PZREDEF" в LISP)
         // ====================================================================================
-        // НАЗНАЧЕНИЕ: переопределяет определения блоков PZ_00...PZ_95 (эталонные формы
+        // НАЗНАЧЕНИЕ: переопределяет определения блоков PZ_01...PZ_93 (эталонные формы
         // арматуры, используемые семейством инструментов QUANTITY) из встроенных DWG-
         // шаблонов (Resources/Standard/PZ_XX.dwg) и досинхронизирует атрибуты у всех
         // найденных в чертеже экземпляров этих блоков - тот же приём, что и PZGN выше
-        // (SyncAttributesToDefinition), просто по 96 именам блоков вместо одного RL-POS.
+        // (SyncAttributesToDefinition), просто по 93 именам блоков вместо одного RL-POS.
         // ПЕРЕВЕДЕНО ИЗ: (defun c:PZREDEF (/) ...) - POSREDEF.LSP, строки 44-53, которая
         // вызывает (defun ReDef ...) (автор - Lee Mac, строки 2-42 того же файла).
         //
@@ -1555,7 +1555,7 @@ namespace PoseEdit2026
         // нужны стандартные слои, для этого уже есть отдельная команда CREATELAYERS/CL.
         // PZREDEFN делает только то, что заявлено в названии - переопределяет блоки.
         //
-        // ВНИМАНИЕ: это операция массового изменения по ВСЕМ 96 блокам PZ_00...PZ_95 -
+        // ВНИМАНИЕ: это операция массового изменения по ВСЕМ 93 блокам PZ_01...PZ_93 -
         // сохраните чертёж перед запуском (как и у PZGN).
         [CommandMethod("PZREDEFN")]
         public static void RedefineStandardShapeBlocksCommand()
@@ -1566,7 +1566,7 @@ namespace PoseEdit2026
             Database db = doc.Database;
 
             string confirm = ReadLine(ed,
-                "\nBu islem PZ_00...PZ_95 bloklarinin TUMUNU guncel sablonlarla yeniden tanimlayacak. " +
+                "\nBu islem PZ_01...PZ_93 bloklarinin TUMUNU guncel sablonlarla yeniden tanimlayacak. " +
                 "Once cizimi kaydedin. Devam edilsin mi? (Evet/Hayir): ");
             if (!string.Equals(confirm, "Evet", StringComparison.OrdinalIgnoreCase)) return;
 
@@ -1575,9 +1575,10 @@ namespace PoseEdit2026
             int syncedInstances = 0;
 
             // "i.ToString("D2")" - тот же приём, что и в PoseEditWindow.xaml.cs для списка
-            // форм: превращает 0,1,2... в "00","01","02"... - имена блоков и файлов
-            // именно двузначные (PZ_00, PZ_01, ..., PZ_95).
-            for (int i = 0; i <= 95; i++)
+            // форм: превращает 1,2,3... в "01","02","03"... - имена блоков и файлов
+            // именно двузначные (PZ_01, PZ_02, ..., PZ_93). Диапазон обновлён 2026-08-22:
+            // каталог пересчитан с 96 (00-95) на 93 позиции (01-93) - см. RebarRecognizer.cs.
+            for (int i = 1; i <= 93; i++)
             {
                 string code = i.ToString("D2");
                 string blockName = "PZ_" + code;
