@@ -885,11 +885,13 @@ namespace PoseEdit2026
             // Цвет слоя posedit.mtr.hidden - ACI (по просьбе пользователя, 2026-08-22).
             const string hiddenLayerName = "posedit.mtr.hidden";
             const short hiddenLayerColorIndex = 144;
+            // Толщина линий арматуры (по прямому ответу пользователя, 2026-08-22).
+            const string barLayerName = "posedit.mtr.bar";
 
             string[] files = Directory.GetFiles(folder, "PZ_*.dwg");
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
 
-            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0, entitiesFixed = 0, codeLabelsFixed = 0, hiddenLayerColorFixed = 0;
+            int filesOk = 0, filesFailed = 0, totalLayerRenames = 0, filesWithStyleFixed = 0, entitiesFixed = 0, codeLabelsFixed = 0, hiddenLayerColorFixed = 0, barLayerWeightFixed = 0;
             Dictionary<string, int> layerFoundCounts = layerRenames.Keys.ToDictionary(k => k, k => 0);
             List<string> filesWithoutCodeLabel = new List<string>();
 
@@ -929,6 +931,18 @@ namespace PoseEdit2026
                                 hiddenLtr.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
                                     Autodesk.AutoCAD.Colors.ColorMethod.ByAci, hiddenLayerColorIndex);
                                 hiddenLayerColorFixed++;
+                            }
+
+                            // --- Толщина линий арматуры (слой posedit.mtr.bar) -> 0.50 мм
+                            // (уточнено пользователем 2026-08-22, было "Default" - не хранилось
+                            // как конкретное число). 0.50 мм - точное совпадение со стандартным
+                            // значением AutoCAD LineWeight050, отдельная таблица округления
+                            // (как в LayerCreator.GetLineWeightFromMM) тут не нужна.
+                            if (lt.Has(barLayerName))
+                            {
+                                LayerTableRecord barLtr = (LayerTableRecord)tr.GetObject(lt[barLayerName], OpenMode.ForWrite);
+                                barLtr.LineWeight = Autodesk.AutoCAD.DatabaseServices.LineWeight.LineWeight050;
+                                barLayerWeightFixed++;
                             }
 
                             // --- Текстовый стиль (нормализованный поиск по имени) ---
@@ -979,7 +993,17 @@ namespace PoseEdit2026
                             // сам номер = имя файла без "PZ_"/".dwg") в ACI-цвет 144, по
                             // прямой просьбе пользователя ("цвет кодового номера каждой
                             // арматуры на 144").
+                            // ВАЖНО (найдено 2026-08-22 по результатам первого прогона - 44 из
+                            // 93 файлов не находили метку): у файлов 50-93 сам DWG был
+                            // переименован (сдвиг номеров каталога, см. RebarRecognizer.cs), но
+                            // ВСТРОЕННЫЙ внутрь текст-метка с номером остался СТАРЫЙ (например,
+                            // PZ_50.dwg - бывший PZ_51.dwg - внутри всё ещё содержит текст "51").
+                            // Поэтому ищем ОБА варианта - текущий номер файла И старый номер до
+                            // сдвига (обратное преобразование того же правила: 50-64 -> +1,
+                            // 65-93 -> +2) - и если найден по старому номеру, ещё и правим сам
+                            // текст на актуальный, а не только красим.
                             string expectedCode = Path.GetFileNameWithoutExtension(fileName).Replace("PZ_", "");
+                            string oldCodeBeforeShift = ReverseShiftToOldCode(expectedCode);
                             bool codeLabelFoundInFile = false;
                             BlockTable bt2 = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                             foreach (ObjectId btrId in bt2)
@@ -1004,17 +1028,21 @@ namespace PoseEdit2026
                                         entitiesFixed++;
                                     }
 
-                                    if (obj is AttributeDefinition adCode && adCode.TextString.Trim() == expectedCode)
+                                    if (obj is AttributeDefinition adCode &&
+                                        (adCode.TextString.Trim() == expectedCode || adCode.TextString.Trim() == oldCodeBeforeShift))
                                     {
                                         adCode.UpgradeOpen();
+                                        if (adCode.TextString.Trim() == oldCodeBeforeShift) adCode.TextString = expectedCode;
                                         adCode.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
                                             Autodesk.AutoCAD.Colors.ColorMethod.ByAci, newCodeLabelColorIndex);
                                         codeLabelsFixed++;
                                         codeLabelFoundInFile = true;
                                     }
-                                    else if (obj is DBText textCode && textCode.TextString.Trim() == expectedCode)
+                                    else if (obj is DBText textCode &&
+                                             (textCode.TextString.Trim() == expectedCode || textCode.TextString.Trim() == oldCodeBeforeShift))
                                     {
                                         textCode.UpgradeOpen();
+                                        if (textCode.TextString.Trim() == oldCodeBeforeShift) textCode.TextString = expectedCode;
                                         textCode.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
                                             Autodesk.AutoCAD.Colors.ColorMethod.ByAci, newCodeLabelColorIndex);
                                         codeLabelsFixed++;
@@ -1046,7 +1074,8 @@ namespace PoseEdit2026
                              $"{totalLayerRenames} layer renames total, {filesWithStyleFixed} files had the text style fixed, " +
                              $"{entitiesFixed} attribute/text objects had WidthFactor/Oblique fixed, " +
                              $"{codeLabelsFixed} code-number labels recolored to ACI {newCodeLabelColorIndex}, " +
-                             $"{hiddenLayerColorFixed} files had layer '{hiddenLayerName}' recolored to ACI {hiddenLayerColorIndex}.");
+                             $"{hiddenLayerColorFixed} files had layer '{hiddenLayerName}' recolored to ACI {hiddenLayerColorIndex}, " +
+                             $"{barLayerWeightFixed} files had layer '{barLayerName}' lineweight set to 0.50mm.");
 
             if (filesWithoutCodeLabel.Count > 0)
                 ed.WriteMessage($"\n{filesWithoutCodeLabel.Count} file(s) had no code-number label matching their own " +
@@ -1067,6 +1096,19 @@ namespace PoseEdit2026
         private static string NormalizeStyleName(string name)
         {
             return (name ?? "").Replace(".", "").Replace(" ", "").Replace("_", "").ToLowerInvariant();
+        }
+
+        // Обратное преобразование сдвига номеров каталога PZ_XX (см. RebarRecognizer.cs,
+        // коммит про переименование 96->93): по НОВОМУ (текущему, после сдвига) номеру файла
+        // возвращает СТАРЫЙ номер, который мог остаться внутри самого DWG как текст. Правило:
+        // 1-49 не менялись; 50-64 были 51-65 (+1); 65-93 были 67-95 (+2).
+        private static string ReverseShiftToOldCode(string currentCode)
+        {
+            if (!int.TryParse(currentCode, out int n)) return currentCode;
+            int old = n;
+            if (n >= 50 && n <= 64) old = n + 1;
+            else if (n >= 65 && n <= 93) old = n + 2;
+            return old.ToString("D2");
         }
     }
 }
