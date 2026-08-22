@@ -131,7 +131,16 @@ namespace PoseEdit2026
                     // --- ВСТАВКА ИЗ РЕСУРСОВ ---
                     // Вызываем наш метод ImportBlockFromResource.
                     // Он достанет файл из DLL и вставит его в чертеж.
-                    blockId = ImportBlockFromResource(db, ResourceName1, insertPoint, 1.0);
+                    // Масштаб вставки - раньше был жёстко зашит как 1.0, из-за чего размеры
+                    // атрибутов на бумаге "плавали" в зависимости от масштаба листа, а не
+                    // оставались постоянными (по прямому запросу пользователя 2026-08-22:
+                    // "потом когда уже в начале работы назначается масштаб, всё на этот
+                    // масштаб умножается"). Используем ТУ ЖЕ формулу, что уже применяется для
+                    // RL-POS2 в LegacyCommands.cs (CreateLinkedCalloutCommand, "77N") -
+                    // (GetScale()/GetUnits())*100 - а не "голый" AppSettings.SheetScale, чтобы
+                    // обе позиции (RL-POS и RL-POS2) масштабировались одинаково и предсказуемо.
+                    double insertScale = (QuantityTableGenerator.GetScale() / QuantityTableGenerator.GetUnits()) * 100.0;
+                    blockId = ImportBlockFromResource(db, ResourceName1, insertPoint, insertScale);
 
                     // Если метод вернул Null, значит произошла ошибка (например, неправильное имя ресурса)
                     if (blockId == ObjectId.Null)

@@ -1106,6 +1106,91 @@ namespace PoseEdit2026
                 ed.WriteMessage($"\nText style '{oldStyleName}' was never found in any file - check the exact name.");
         }
 
+        // ====================================================================================
+        // КОМАНДА: RLPOSCHECK — диагностика атрибутов RL-POS.dwg/RL-POS2.dwg (без изменений)
+        // ====================================================================================
+        // НАЗНАЧЕНИЕ: пользователь попросил проверить (2026-08-22) высоту текста и в этих двух
+        // файлах тоже, по аналогии с PZSTDFIX для PZ_XX.dwg. Но RL-POS - гораздо более
+        // критичный, часто используемый блок (основной блок позиции, вставляется командой EEN
+        // для КАЖДОЙ позиции арматуры), а не редко трогаемый эскиз-справочник. В отличие от
+        // PZ_XX (где все A-F атрибуты явно однотипны и на скриншоте подтверждено Height=25 у
+        // всех), в RL-POS атрибутов гораздо больше (POZ, TB, BOY, TIP, A-F, R, ARALIK, NOTE,
+        // MALZEME, TIK...) и НЕТ уверенности, что все они должны иметь ОДНУ высоту (например,
+        // POZ - номер позиции - на реальных чертежах часто крупнее остальных полей для
+        // читаемости). Слепо выставлять всем одну высоту рискованно без проверки. Поэтому
+        // сначала - только диагностика: печатает Tag/Height/WidthFactor/Oblique/Style для
+        // каждого AttributeDefinition в обоих файлах, ничего не меняя.
+        [CommandMethod("RLPOSCHECK")]
+        public static void CheckRlPosAttributesCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            PromptStringOptions folderOpts = new PromptStringOptions(
+                "\nFolder with RL-POS.dwg/RL-POS2.dwg: ")
+            {
+                DefaultValue = @"C:\Users\durum\Documents\GitHub\PoseEdit2026\Resources",
+                UseDefaultValue = true,
+                AllowSpaces = true
+            };
+            PromptResult folderRes = ed.GetString(folderOpts);
+            if (folderRes.Status != PromptStatus.OK) return;
+            string folder = folderRes.StringResult;
+
+            if (!Directory.Exists(folder))
+            {
+                ed.WriteMessage($"\nFolder not found: {folder}");
+                return;
+            }
+
+            string[] fileNames = { "RL-POS.dwg", "RL-POS2.dwg" };
+            foreach (string fileName in fileNames)
+            {
+                string path = Path.Combine(folder, fileName);
+                if (!File.Exists(path))
+                {
+                    ed.WriteMessage($"\n{fileName}: not found at {path}");
+                    continue;
+                }
+
+                ed.WriteMessage($"\n--- {fileName} ---");
+                try
+                {
+                    using (Database db = new Database(false, true))
+                    {
+                        db.ReadDwgFile(path, FileOpenMode.OpenForReadAndAllShare, true, null);
+                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                        {
+                            BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                            foreach (ObjectId btrId in bt)
+                            {
+                                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead);
+                                if (btr.IsLayout) continue; // пропускаем *Model_Space/*Paper_Space
+
+                                foreach (ObjectId entId in btr)
+                                {
+                                    DBObject obj = tr.GetObject(entId, OpenMode.ForRead);
+                                    if (obj is AttributeDefinition attDef)
+                                    {
+                                        TextStyleTableRecord style = (TextStyleTableRecord)tr.GetObject(attDef.TextStyleId, OpenMode.ForRead);
+                                        ed.WriteMessage($"\n  Tag={attDef.Tag,-10} Height={attDef.Height,-8:0.###} " +
+                                                         $"WidthFactor={attDef.WidthFactor,-6:0.###} Oblique={attDef.Oblique * 180.0 / Math.PI,-6:0.#}deg " +
+                                                         $"Style=\"{style.Name}\"");
+                                    }
+                                }
+                            }
+                            tr.Commit();
+                        }
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    ed.WriteMessage($"\n{fileName}: ERROR {ex.Message}");
+                }
+            }
+        }
+
         // Сравнение имён текстовых стилей без учёта точек/пробелов/подчёркиваний/регистра -
         // так реальное имя в DWG может слегка отличаться по пунктуации от того, что
         // продиктовал пользователь, и всё равно найдётся.
