@@ -897,14 +897,41 @@ namespace PoseEdit2026
             tr.AddNewlyCreatedDBObject(line, true);
         }
 
-        // Возвращает ObjectId текстового стиля: "posedit.ISOCPEUR" (был "ren Gost.common" до
-        // переименования 2026-08-22) или стиль по умолчанию, если такого стиля в чертеже нет.
+        // Возвращает ObjectId текстового стиля "posedit.ISOCPEUR" (был "ren Gost.common" до
+        // переименования 2026-08-22) - создаёт его, если в чертеже ещё нет ни одного, ни
+        // другого.
+        //
+        // ВАЖНО (найдено пользователем 2026-08-22 - "тип шрифта на Ведомость деталей другой,
+        // Standard"): в ЧИСТОМ чертеже (без единого блока PZ_XX) стиля "posedit.ISOCPEUR" ещё
+        // нет вообще - он попадает в чертёж только вместе с ПЕРВЫМ вставленным блоком PZ_XX
+        // (TryInsertPzBlock, db.Insert тащит зависимые именованные объекты блока с собой). Но
+        // заголовки Таблицы 1 ("Ведомость деталей", "Поз.", "Эскиз") рисуются РАНЬШЕ первой
+        // вставки блока - на этот момент tst.Has(...) возвращал false, и функция откатывалась
+        // на db.Textstyle (обычно "Standard") - шрифт заголовков визуально отличался от
+        // шрифта самих эскизов. Теперь вместо отката на Standard стиль СОЗДАЁТСЯ здесь же, с
+        // теми же параметрами, что PZSTDFIX проставляет в шаблонах - гарантированно готов до
+        // первого вызова RenText, независимо от порядка вставки блоков. Как бонус, если стиль
+        // уже существует к моменту вставки первого PZ_XX, AutoCAD переиспользует его вместо
+        // импорта собственной копии из шаблона - должно убрать и путаницу с "posedit ISOCPEUR"
+        // (с пробелом) как отдельным, похожим стилем.
         private static ObjectId GetTextStyleId(Database db, Transaction tr)
         {
             TextStyleTable tst = tr.GetObject(db.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
-            if (tst != null && tst.Has("posedit.ISOCPEUR")) return tst["posedit.ISOCPEUR"];
-            if (tst != null && tst.Has("ren Gost.common")) return tst["ren Gost.common"];
-            return db.Textstyle;
+            if (tst == null) return db.Textstyle;
+            if (tst.Has("posedit.ISOCPEUR")) return tst["posedit.ISOCPEUR"];
+            if (tst.Has("ren Gost.common")) return tst["ren Gost.common"];
+
+            tst.UpgradeOpen();
+            TextStyleTableRecord newStyle = new TextStyleTableRecord();
+            newStyle.Name = "posedit.ISOCPEUR";
+            newStyle.FileName = ""; // TrueType (см. PZSTDFIX/RoutineCommands.cs) - не .shx/.shp
+            newStyle.Font = new Autodesk.AutoCAD.GraphicsInterface.FontDescriptor("ISOCPEUR", false, false, 0, 0);
+            newStyle.XScale = 0.9;
+            newStyle.ObliquingAngle = 0.0;
+            tst.Add(newStyle);
+            tr.AddNewlyCreatedDBObject(newStyle, true);
+            tst.DowngradeOpen();
+            return newStyle.ObjectId;
         }
 
         // Рисует однострочный текст DBText.
