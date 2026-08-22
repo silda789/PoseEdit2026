@@ -805,15 +805,25 @@ namespace PoseEdit2026
         //      "length" сохранена намеренно, раз она уже есть в реальных слоях - меняем
         //      только префикс, не исправляем чужую опечатку).
         //   2. Текстовый стиль "ren Gost.common" -> "posedit.ISOCPEUR": имя, шрифт (GOST
-        //      Common -> isocpeur.shx), ширину (0.7 -> 0.9), уклон (10° -> 0°).
+        //      Common -> ISOCPEUR), ширину (0.7 -> 0.9), уклон (10° -> 0°).
+        //
+        // ВАЖНО (исправлено 2026-08-22 - первая версия ошибочно ставила SHX-файл): "ISOCPEUR"
+        // - это Windows TrueType-шрифт (см. "ISOCPEUR (windows fonts)" от пользователя), а
+        // НЕ файл фигур AutoCAD isocpeur.shx - хотя стандартный AutoCAD и правда поставляется
+        // с одноимённым .shx, тут нужен именно установленный в Windows TTF. Для TrueType-
+        // шрифта в API это задаётся через TextStyleTableRecord.Font (свойство типа
+        // FontDescriptor из Autodesk.AutoCAD.GraphicsInterface), а не через FileName (FileName
+        // - только для .shx/.shp) - FileName для такого стиля обнуляется. Точный API проверен
+        // рефлексией по реальной сборке AcDbMgd.dll (метода "SetFont" в этой версии нет).
         //
         // ВАЖНО: имя текстового стиля ищется НЕ строго по символам, а по "нормализованному"
-        // сравнению (без точек/пробелов/подчёркиваний, без учёта регистра) - если реальное
-        // имя в файле слегка отличается от того, что продиктовал пользователь (например,
-        // "REN.GOST.COMMON" вместо "ren Gost.common"), стиль всё равно найдётся. Слои и файл,
-        // где стиль НЕ нашёлся вообще ни разу за весь проход, отдельно перечисляются в конце -
-        // это сигнал, что имя реально другое и нужно уточнить у пользователя, а не молча
-        // гадать дальше.
+        // сравнению (без точек/пробелов/подчёркиваний, без учёта регистра) и проверяется
+        // ОБА варианта - старое имя "ren Gost.common" И уже переименованное "posedit.ISOCPEUR" -
+        // так команду можно безопасно перезапускать повторно (например, чтобы досчитать
+        // шрифт после того, как имя уже переименовано прошлым запуском), а не только один раз.
+        // Слои и стиль, которые НЕ нашлись вообще ни разу за весь проход, отдельно
+        // перечисляются в конце - сигнал, что имя реально другое и нужно уточнить у
+        // пользователя, а не молча гадать дальше.
         //
         // БЕЗОПАСНОСТЬ: каждый файл сохраняется через временный "*.dwg.tmp" рядом, и только
         // после успешного SaveAs + Dispose оригинал заменяется (File.Delete + File.Move) -
@@ -857,7 +867,9 @@ namespace PoseEdit2026
 
             const string oldStyleName = "ren Gost.common";
             const string newStyleName = "posedit.ISOCPEUR";
-            const string newStyleFont = "isocpeur.shx";
+            // "ISOCPEUR" здесь - Windows TrueType-шрифт (устанавливается в системе), НЕ файл
+            // фигур AutoCAD isocpeur.shx - см. TextStyleTableRecord.SetFont ниже.
+            const string newStyleTypeface = "ISOCPEUR";
             const double newWidthFactor = 0.9;
             const double newObliqueDeg = 0.0;
 
@@ -894,12 +906,19 @@ namespace PoseEdit2026
                             }
 
                             // --- Текстовый стиль (нормализованный поиск по имени) ---
+                            // Проверяем ОБА варианта имени - старое "ren Gost.common" и уже
+                            // переименованное "posedit.ISOCPEUR" - чтобы повторный запуск (после
+                            // того как первый раз переименовал, но поставил неверный шрифт)
+                            // тоже находил и доправлял стиль, а не считал его "не найденным".
                             TextStyleTable stt = (TextStyleTable)tr.GetObject(db.TextStyleTableId, OpenMode.ForRead);
                             ObjectId styleId = ObjectId.Null;
+                            string normOld = NormalizeStyleName(oldStyleName);
+                            string normNew = NormalizeStyleName(newStyleName);
                             foreach (ObjectId id in stt)
                             {
                                 TextStyleTableRecord candidate = (TextStyleTableRecord)tr.GetObject(id, OpenMode.ForRead);
-                                if (NormalizeStyleName(candidate.Name) == NormalizeStyleName(oldStyleName))
+                                string norm = NormalizeStyleName(candidate.Name);
+                                if (norm == normOld || norm == normNew)
                                 {
                                     styleId = id;
                                     break;
@@ -909,7 +928,13 @@ namespace PoseEdit2026
                             {
                                 TextStyleTableRecord sttr = (TextStyleTableRecord)tr.GetObject(styleId, OpenMode.ForWrite);
                                 if (!stt.Has(newStyleName)) sttr.Name = newStyleName;
-                                sttr.FileName = newStyleFont;
+                                // TrueType (Windows) шрифт - НЕ файл фигур .shx/.shp, поэтому
+                                // FileName обнуляется, а typeface задаётся через свойство Font
+                                // (FontDescriptor) - в этой версии API нет метода SetFont,
+                                // только settable-свойство (проверено рефлексией на AcDbMgd.dll).
+                                sttr.FileName = "";
+                                sttr.Font = new Autodesk.AutoCAD.GraphicsInterface.FontDescriptor(
+                                    newStyleTypeface, false, false, 0, 0);
                                 sttr.XScale = newWidthFactor;
                                 sttr.ObliquingAngle = newObliqueDeg * Math.PI / 180.0;
                                 filesWithStyleFixed++;
